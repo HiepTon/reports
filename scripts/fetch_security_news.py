@@ -34,6 +34,18 @@ from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlunparse
 
 import feedparser
 
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+from digest_reader_embed import (
+    READ_NEWS_SUMMARY_MODEL_DEFAULT,
+    READ_NEWS_TTS_MODEL_DEFAULT,
+    READ_NEWS_VOICE_DEFAULT,
+    digest_reader_css,
+    digest_reader_script,
+    digest_reader_toolbar_inner,
+)
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_FEEDS_PATH = _REPO_ROOT / "config" / "security_news_feeds.json"
 
@@ -596,6 +608,9 @@ def build_html(
     generated_at: datetime | None = None,
     server_days: int | None = None,
     gemini_model: str | None = None,
+    read_news_summary_model: str = READ_NEWS_SUMMARY_MODEL_DEFAULT,
+    read_news_tts_model: str = READ_NEWS_TTS_MODEL_DEFAULT,
+    read_news_voice: str = READ_NEWS_VOICE_DEFAULT,
 ) -> str:
     when = (generated_at or datetime.now(timezone.utc)).strftime("%Y-%m-%d %H:%M UTC")
     day_default = str(server_days if server_days is not None else 14)
@@ -611,6 +626,15 @@ def build_html(
         )
     else:
         gemini_note = "Summaries are from RSS feeds; analysis uses local keyword heuristics (no LLM)."
+    reader_frag = (
+        " Read news: "
+        + html_module.escape(read_news_summary_model)
+        + " prepares lines, "
+        + html_module.escape(read_news_tts_model)
+        + " synthesizes audio (voice "
+        + html_module.escape(read_news_voice)
+        + "); API key prompt, sessionStorage only."
+    )
     cards: list[str] = []
     for it in items:
         pub = html_module.escape(it.published or "date unknown")
@@ -645,8 +669,10 @@ def build_html(
         )
 
     body = "\n".join(cards)
-    filter_note_esc = html_module.escape(filter_note)
     gemini_note_esc = html_module.escape(gemini_note)
+    filter_hint_esc = html_module.escape(
+        f"{filter_note} Client filter hides cards without a machine date."
+    ) + reader_frag
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -717,6 +743,7 @@ def build_html(
     .btn-sec:hover {{ border-color: var(--accent); }}
     .linkrow {{ margin: 0.85rem 0 0; word-break: break-all; font-size: 0.85rem; }}
     a.full {{ color: var(--accent); }}
+{digest_reader_css()}
   </style>
 </head>
 <body>
@@ -731,7 +758,8 @@ def build_html(
       </label>
       <button type="button" class="apply" id="applyDays">Apply</button>
       <button type="button" class="reset" id="resetDays">Show all</button>
-      <p class="filter-hint">{filter_note_esc} Client filter hides cards without a machine date.</p>
+      <p class="filter-hint">{filter_hint_esc}</p>
+{digest_reader_toolbar_inner(lang="en")}
     </div>
 {body}
   </div>
@@ -774,6 +802,9 @@ def build_html(
   if (b1) b1.addEventListener("click", applyDayFilter);
   if (b2) b2.addEventListener("click", resetFilter);
 }})();
+  </script>
+  <script>
+{digest_reader_script(lang="en", summary_model=read_news_summary_model, tts_model=read_news_tts_model, voice=read_news_voice)}
   </script>
 </body>
 </html>
@@ -862,6 +893,24 @@ def main() -> int:
         default=7,
         help="Retries per chunk on 429 / RESOURCE_EXHAUSTED (uses server 'retry in Xs' when present).",
     )
+    parser.add_argument(
+        "--read-news-summary-model",
+        default=READ_NEWS_SUMMARY_MODEL_DEFAULT,
+        metavar="MODEL_ID",
+        help="Model for turning visible cards into read-aloud lines (JSON).",
+    )
+    parser.add_argument(
+        "--read-news-tts-model",
+        default=READ_NEWS_TTS_MODEL_DEFAULT,
+        metavar="MODEL_ID",
+        help="Gemini TTS model for speech audio (generateContent + AUDIO).",
+    )
+    parser.add_argument(
+        "--read-news-voice",
+        default=READ_NEWS_VOICE_DEFAULT,
+        metavar="NAME",
+        help="Prebuilt Gemini TTS voice (e.g. Enceladus, Kore).",
+    )
     args = parser.parse_args()
 
     if args.days is not None and args.days < 1:
@@ -922,7 +971,17 @@ def main() -> int:
     if args.html:
         out = Path(args.html)
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(build_html(items, server_days=server_days, gemini_model=gemini_model_used), encoding="utf-8")
+        out.write_text(
+            build_html(
+                items,
+                server_days=server_days,
+                gemini_model=gemini_model_used,
+                read_news_summary_model=args.read_news_summary_model,
+                read_news_tts_model=args.read_news_tts_model,
+                read_news_voice=args.read_news_voice,
+            ),
+            encoding="utf-8",
+        )
         print(f"Wrote {out.resolve()} ({len(items)} items).", file=sys.stderr)
 
     if args.json:

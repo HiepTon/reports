@@ -96,8 +96,37 @@ Many sites expose `/feed/`, `/rss`, or FeedBurner URLs. Prefer **official RSS/At
 
 **SC Media / SC World:** scripted access to scworld.com is often blocked or not real RSS. If you get a stable feed URL, add it to the JSON like any other source.
 
+## Vietnam news digest
+
+[`scripts/fetch_vietnam_news.py`](scripts/fetch_vietnam_news.py) aggregates **Vietnamese press RSS** feeds (see [`config/vietnam_news_feeds.json`](config/vietnam_news_feeds.json)), optionally calls **Gemini** to write a **Vietnamese summary** and assign one of a fixed set of **categories** (Thời sự, Kinh tế, Thế giới, …). Output: **HTML** and/or **JSON**; UI strings are Vietnamese.
+
+**Source priority:** [tuổi trẻ.vn](https://tuoitre.vn/), [thanhnien.vn](https://thanhnien.vn/), and [dantri.com.vn](https://dantri.com.vn/) are **fetched first**. After merge, the digest is sorted **newest first**; when timestamps tie, order is **Tuổi Trẻ → Thanh Niên → Dân Trí → other feeds** (see `PRIORITY_SOURCE_ORDER` in `scripts/fetch_vietnam_news.py`). Those three feeds are listed first in [`config/vietnam_news_feeds.json`](config/vietnam_news_feeds.json).
+
+### Setup
+
+```bash
+pip install -r requirements-vietnam-news.txt
+```
+
+### Local run
+
+```bash
+python scripts/fetch_vietnam_news.py --limit 15
+GEMINI_API_KEY=... python scripts/fetch_vietnam_news.py --gemini --days 2 --html output/vietnam/index.html
+```
+
+Without **`--gemini`**, the digest keeps the RSS blurb as summary and sets category **`Chưa phân loại`**. Gemini flags mirror the security script (`--gemini-chunk-size`, `--gemini-model`, etc.).
+
+### GitHub Actions (daily 5:00 Vietnam)
+
+Workflow: [`.github/workflows/vietnam-news-daily.yml`](.github/workflows/vietnam-news-daily.yml).
+
+- **Cron:** `0 22 * * *` **UTC** → **05:00** on the **next calendar day** in **Vietnam** (ICT, **UTC+7**). GitHub Actions cron is always UTC; [scheduled runs](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#schedule) may slip slightly.
+- **Artifact:** each run uploads **`vietnam-news`** (zip with `index.html`). This workflow does **not** deploy GitHub Pages (to avoid overwriting the security digest site in the same `output/` root); download the artifact or merge into your own Pages pipeline if needed.
+
 ### Other scripts
 
+- `scripts/fetch_vietnam_news.py` — Vietnam RSS digest with optional Gemini summaries and categories ([Vietnam news digest](#vietnam-news-digest)).
 - `scripts/build_insight_report_docx.py` — builds insight report documents (see script docstring and usage there).
 
 ### Notes
