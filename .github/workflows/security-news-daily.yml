@@ -33,13 +33,27 @@ jobs:
         run: pip install -r requirements-security-news.txt
 
       - name: Build site (index.html for Pages root)
-        run: >
-          python scripts/fetch_security_news.py
-          --days 7
-          --per-source 25
-          --limit 35
-          --pause 0.35
-          --html output/index.html
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          set -e
+          GEMINI_FLAG=""
+          if [ -n "${GEMINI_API_KEY:-}" ]; then
+            GEMINI_FLAG="--gemini"
+            echo "GEMINI_API_KEY is set; enabling Gemini (chunked summaries)."
+          else
+            echo "GEMINI_API_KEY not set; using RSS + heuristic text only."
+          fi
+          python scripts/fetch_security_news.py \
+            --days 3 \
+            --per-source 25 \
+            --limit 30 \
+            --pause 0.35 \
+            --html output/index.html \
+            --gemini-chunk-size 5 \
+            --gemini-chunk-pause 32 \
+            --gemini-max-excerpt-chars 450 \
+            $GEMINI_FLAG
 
       - name: Disable Jekyll (static HTML only)
         run: touch output/.nojekyll

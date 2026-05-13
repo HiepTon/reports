@@ -4,7 +4,7 @@ Workspace for security reporting utilities and generated artifacts.
 
 ## Security news digest
 
-`scripts/fetch_security_news.py` pulls recent headlines from public RSS/Atom feeds, builds a **short summary** (from the feed), adds **keyword-based defensive analysis** (no external LLM), and outputs the **canonical article URL**.
+`scripts/fetch_security_news.py` pulls recent headlines from public RSS/Atom feeds, then either keeps **RSS summaries + keyword heuristics** or, with **`--gemini`**, calls **Google Gemini in small batches** (with pauses and **429 retries**) to rewrite **summary** and **analysis**—this stays closer to **free-tier** token and request limits than one giant prompt. It always outputs the **canonical article URL**.
 
 **Feed list:** edit [`config/security_news_feeds.json`](config/security_news_feeds.json) (see [Adding feeds](#adding-or-changing-feeds)). Override path with `--feeds-config`.
 
@@ -54,6 +54,27 @@ python scripts/fetch_security_news.py --sources projectzero,cisa,krebs --limit 8
 
 Optional pause between feed requests (`--pause 0.5`) and HTTP timeout (`--timeout 30`).
 
+### Google Gemini (chunked + 429 retries)
+
+1. Create an API key in [Google AI Studio](https://aistudio.google.com/apikey).
+2. Export **`GEMINI_API_KEY`** (or **`GOOGLE_API_KEY`**).
+3. Run with **`--gemini`**.
+
+```bash
+export GEMINI_API_KEY="your-key"
+python scripts/fetch_security_news.py --days 7 --limit 25 --gemini --html output/index.html
+```
+
+**Free tier / 429 RESOURCE_EXHAUSTED:** the script defaults to **several small API calls** (`--gemini-chunk-size` default **6** articles) with a **pause between chunks** (`--gemini-chunk-pause`, default **28s**) and **retries** that honor Google’s “retry in Xs” hint (`--gemini-retries`, default **7**). That reduces spikes in **input tokens per minute** and **requests per minute**. You can tighten further: `--gemini-chunk-size 4 --gemini-chunk-pause 35 --gemini-max-excerpt-chars 400`.
+
+Default model is **`gemini-3-flash-preview`** (Gemini 3 Flash), which supports the **`generateContent`** API this script uses. **Gemini 3.x “Flash Live”** models (for example `gemini-3.1-flash-live-preview`) are for the **Live API** (WebSocket), not `generateContent`—using them here returns **404**. Override with **`--gemini-model`** to any id your key supports (check **List models** in [Google AI Studio](https://aistudio.google.com/)).
+
+Tuning flags: **`--gemini-max-excerpt-chars`** (default 480), **`--gemini-max-output-tokens`**, **`--gemini-timeout`**, **`--gemini-chunk-size`** (use **0** for a single request containing every article—higher 429 risk on free tier).
+
+If Gemini errors or returns unusable JSON, the script **falls back** to RSS + heuristics and still writes HTML/JSON.
+
+**GitHub Actions:** add a repository secret **`GEMINI_API_KEY`**. The scheduled workflow passes **`--gemini` automatically when the secret is set**; if unset, the build uses RSS + heuristics only (no failure).
+
 ### Adding or changing feeds
 
 1. Open [`config/security_news_feeds.json`](config/security_news_feeds.json).
@@ -81,7 +102,7 @@ Many sites expose `/feed/`, `/rss`, or FeedBurner URLs. Prefer **official RSS/At
 
 ### Notes
 
-- Analysis text is **heuristic** (tags such as CVE, ransomware, phishing, patch, OT, etc.). For narrative analysis tied to your environment, layer an LLM or analyst workflow on top of the JSON output.
+- Without **`--gemini`**, analysis is **heuristic** (CVE, ransomware, phishing, patch, OT, etc.). With **`--gemini`**, both summary and analysis are model-generated from RSS excerpts only—**verify** important claims against the source article.
 - Feeds and sites change; failures for one source are reported on stderr and skipped.
 - Text output includes a **Post to LinkedIn** URL line per item; JSON includes **`linkedin_share_url`** on each object (same URL as the HTML button).
 
@@ -99,7 +120,17 @@ git remote add origin https://github.com/YOUR_USER/reports.git
 git push -u origin main
 ```
 
-Create the empty repository first in the GitHub UI (**New repository**), then run the commands above. Do not commit secrets (API keys, `.env`); this project does not need them for the RSS digest.
+Create the empty repository first in the GitHub UI (**New repository**), then run the commands above. Do not commit API keys; use **GitHub Actions secrets** (e.g. `GEMINI_API_KEY`) for Gemini.
+
+Repository secrets (usual case)
+  Open the repo on GitHub.
+  Go to Settings (repo tabs).
+  In the left sidebar: Secrets and variables → Actions.
+  Open the Secrets tab (not “Variables” unless you want non-secret config).
+  Click New repository secret.
+  Name: use LIKE_THIS (e.g. GEMINI_API_KEY, HF_TOKEN). Convention: uppercase with underscores.
+  Secret: paste the value once; you cannot view it again after saving (only update or delete).
+  Save.
 
 ## GitHub Pages (public URL)
 

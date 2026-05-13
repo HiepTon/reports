@@ -2,7 +2,9 @@
 """
 Fetch recent headlines from major security news RSS/Atom feeds.
 
-Outputs topic (title), short summary, brief heuristic analysis, and canonical link.
+Produces topic (title), summary, analysis, and canonical link. By default summaries come from RSS
+and analysis from local heuristics; with --gemini and GEMINI_API_KEY, Gemini rewrites summary and
+analysis in small batches (fewer tokens per request, pauses + retries on 429) to fit free-tier limits.
 
 Usage:
   pip install -r requirements-security-news.txt
@@ -12,17 +14,18 @@ Usage:
   python scripts/fetch_security_news.py --days 7 --html output/security_news.html
   python scripts/fetch_security_news.py --sources bleepingcomputer,cisa
   python scripts/fetch_security_news.py --feeds-config /path/to/feeds.json
+  GEMINI_API_KEY=... python scripts/fetch_security_news.py --gemini --html out.html
 """
-
 from __future__ import annotations
 
 import argparse
 import html as html_module
 import json
+import os
 import re
 import sys
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import urllib.error
@@ -228,6 +231,233 @@ def heuristic_analysis(title: str, summary: str) -> str:
     return " ".join(out)
 
 
+_JSON_FENCE_RE = re.compile(r"^```(?:json)?\s*", re.I | re.M)
+_JSON_FENCE_TAIL_RE = re.compile(r"\s*```\s*$", re.M)
+
+
+def strip_json_fenced_text(text: str) -> str:
+    t = text.strip()
+    if t.startswith("```"):
+        t = _JSON_FENCE_RE.sub("", t, count=1)
+        t = _JSON_FENCE_TAIL_RE.sub("", t)
+    return t.strip()
+
+
+def gemini_api_key() -> str | None:
+    return (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip() or None
+
+
+_RETRY_IN_RE = re.compile(r"retry in ([\d.]+)\s*s", re.I)
+
+
+def _is_gemini_rate_limit(exc: BaseException) -> bool:
+    try:
+        from google.genai import errors as genai_errors
+
+        if isinstance(exc, genai_errors.APIError) and getattr(exc, "code", None) == 429:
+            return True
+    except ImportError:
+        pass
+    msg = str(exc).upper()
+    return "429" in msg or "RESOURCE_EXHAUSTED" in msg
+
+
+def _gemini_retry_sleep_seconds(exc: BaseException, attempt: int) -> float:
+    m = _RETRY_IN_RE.search(str(exc))
+    if m:
+        return min(max(float(m.group(1)) + 2.0, 6.0), 120.0)
+    return min(15.0 * (2**attempt), 120.0)
+
+
+def _parse_gemini_json_list(raw_text: str) -> list[dict]:
+    try:
+        parsed = json.loads(strip_json_fenced_text(raw_text))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Gemini response was not valid JSON: {exc}") from exc
+
+    if isinstance(parsed, dict):
+        for key in ("articles", "items", "results", "output"):
+            if key in parsed and isinstance(parsed[key], list):
+                parsed = parsed[key]
+                break
+
+    if not isinstance(parsed, list):
+        raise RuntimeError("Gemini JSON must be an array (or an object wrapping an array).")
+    return parsed
+
+
+def _rows_to_index_maps(rows: list) -> tuple[dict[int, dict], dict[str, dict]]:
+    by_index: dict[int, dict] = {}
+    by_link: dict[str, dict] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        idx = row.get("index")
+        if isinstance(idx, bool):
+            continue
+        if isinstance(idx, float) and idx.is_integer():
+            idx = int(idx)
+        if isinstance(idx, int) and idx >= 0:
+            by_index[idx] = row
+        lk = row.get("link")
+        if isinstance(lk, str) and lk.strip():
+            by_link[normalize_url(lk.strip())] = row
+    return by_index, by_link
+
+
+def _apply_gemini_rows(
+    out: list[NewsItem],
+    indices: list[int],
+    by_index: dict[int, dict],
+    by_link: dict[str, dict],
+) -> None:
+    for i in indices:
+        it = out[i]
+        row = by_index.get(i) or by_link.get(normalize_url(it.link))
+        if not row:
+            continue
+        summary = str(row.get("summary") or "").strip()
+        analysis = str(row.get("analysis") or "").strip()
+        if not summary or not analysis:
+            continue
+        out[i] = replace(
+            out[i],
+            summary=summary[:4000],
+            analysis=analysis[:4000],
+        )
+
+
+def _gemini_payload_for_indices(
+    out: list[NewsItem],
+    indices: list[int],
+    max_excerpt_chars: int,
+) -> list[dict]:
+    payload: list[dict] = []
+    for i in indices:
+        it = out[i]
+        excerpt = it.summary
+        if len(excerpt) > max_excerpt_chars:
+            excerpt = excerpt[: max_excerpt_chars - 1].rsplit(" ", 1)[0] + "…"
+        payload.append(
+            {
+                "index": i,
+                "link": it.link,
+                "source": it.source_name,
+                "title": it.topic,
+                "rss_excerpt": excerpt,
+            }
+        )
+    return payload
+
+
+def gemini_batch_enrich(
+    items: list[NewsItem],
+    *,
+    api_key: str,
+    model: str,
+    max_excerpt_chars: int,
+    max_output_tokens: int,
+    request_timeout_s: int,
+    chunk_size: int,
+    chunk_pause_s: float,
+    max_retries: int,
+) -> list[NewsItem]:
+    """
+    Rewrite summaries/analysis via Gemini using chunked API calls and pauses to respect
+    free-tier tokens-per-minute / requests-per-minute, with retries on 429 RESOURCE_EXHAUSTED.
+    """
+    if not items:
+        return items
+
+    try:
+        from google import genai
+        from google.genai import errors as genai_errors
+        from google.genai import types
+    except ImportError as exc:
+        raise RuntimeError("Install google-genai (see requirements-security-news.txt).") from exc
+
+    n = len(items)
+    if chunk_size <= 0 or chunk_size > n:
+        chunk_size = n
+
+    instructions = (
+        "You are a careful cybersecurity editor. You receive ONLY short RSS excerpts and metadata — "
+        "not full articles. Do not invent incidents, victims, or CVEs that are not clearly supported by the excerpt. "
+        "If the excerpt is thin, say what is known and what would require reading the source.\n\n"
+        "Return ONLY a JSON array (no markdown fences). Each element must be an object with keys exactly: "
+        '"index" (integer, matching input), "link" (string, same as input), '
+        '"summary" (string, 2–4 sentences, plain English), '
+        '"analysis" (string, 2–4 sentences: implications for defenders, patch/hunt/priority angle).\n\n'
+        "The array MUST have the same length as the input list and use the same index values.\n\n"
+        "INPUT_ARTICLES_JSON:\n"
+    )
+
+    client = genai.Client(api_key=api_key)
+    out = list(items)
+
+    for start in range(0, n, chunk_size):
+        end = min(start + chunk_size, n)
+        indices = list(range(start, end))
+        payload = _gemini_payload_for_indices(out, indices, max_excerpt_chars)
+        prompt = instructions + json.dumps(payload, ensure_ascii=False)
+        tokens_this_chunk = min(max_output_tokens, max(2048, 450 * len(indices)))
+
+        for attempt in range(max_retries):
+            try:
+                resp = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.35,
+                        max_output_tokens=tokens_this_chunk,
+                        response_mime_type="application/json",
+                        http_options=types.HttpOptions(timeout=request_timeout_s * 1000),
+                    ),
+                )
+                raw_text = (getattr(resp, "text", None) or "").strip()
+                if not raw_text:
+                    pf = getattr(resp, "prompt_feedback", None)
+                    raise RuntimeError(f"Gemini returned empty text. prompt_feedback={pf!r}")
+
+                rows = _parse_gemini_json_list(raw_text)
+                if len(rows) != len(indices):
+                    print(
+                        f"Warning: Gemini returned {len(rows)} rows for chunk indices {start}-{end - 1}, "
+                        f"expected {len(indices)}; merging partial results.",
+                        file=sys.stderr,
+                    )
+                by_i, by_l = _rows_to_index_maps(rows)
+                _apply_gemini_rows(out, indices, by_i, by_l)
+                break
+            except genai_errors.APIError as exc:
+                if _is_gemini_rate_limit(exc) and attempt < max_retries - 1:
+                    delay = _gemini_retry_sleep_seconds(exc, attempt)
+                    print(
+                        f"Gemini 429 / quota on chunk {start}-{end - 1}; sleeping {delay:.1f}s "
+                        f"(retry {attempt + 2}/{max_retries}).",
+                        file=sys.stderr,
+                    )
+                    time.sleep(delay)
+                    continue
+                raise
+            except Exception as exc:
+                if _is_gemini_rate_limit(exc) and attempt < max_retries - 1:
+                    delay = _gemini_retry_sleep_seconds(exc, attempt)
+                    print(
+                        f"Gemini rate/quota error on chunk {start}-{end - 1}; sleeping {delay:.1f}s "
+                        f"(retry {attempt + 2}/{max_retries}).",
+                        file=sys.stderr,
+                    )
+                    time.sleep(delay)
+                    continue
+                raise
+
+        if end < n and chunk_pause_s > 0:
+            time.sleep(chunk_pause_s)
+
+    return out
+
+
 _DEFAULT_UA = (
     "Mozilla/5.0 (compatible; reports-fetch_security_news/1.0; "
     "+https://github.com/) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -365,6 +595,7 @@ def build_html(
     items: list[NewsItem],
     generated_at: datetime | None = None,
     server_days: int | None = None,
+    gemini_model: str | None = None,
 ) -> str:
     when = (generated_at or datetime.now(timezone.utc)).strftime("%Y-%m-%d %H:%M UTC")
     day_default = str(server_days if server_days is not None else 14)
@@ -373,6 +604,13 @@ def build_html(
         if server_days is not None
         else "No server date window; use the control below to hide older cards in the browser."
     )
+    if gemini_model:
+        gemini_note = (
+            f"Summaries and analysis were generated by Google Gemini ({gemini_model}) in one batched request "
+            f"from RSS excerpts only; verify critical facts against the original article."
+        )
+    else:
+        gemini_note = "Summaries are from RSS feeds; analysis uses local keyword heuristics (no LLM)."
     cards: list[str] = []
     for it in items:
         pub = html_module.escape(it.published or "date unknown")
@@ -408,6 +646,7 @@ def build_html(
 
     body = "\n".join(cards)
     filter_note_esc = html_module.escape(filter_note)
+    gemini_note_esc = html_module.escape(gemini_note)
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -433,6 +672,7 @@ def build_html(
     .wrap {{ max-width: 52rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }}
     h1 {{ font-size: 1.35rem; font-weight: 650; margin: 0 0 0.25rem; }}
     .meta {{ color: var(--muted); font-size: 0.9rem; margin-bottom: 0.75rem; }}
+    .submeta {{ display: inline-block; margin-top: 0.35rem; font-size: 0.82rem; color: #8fa6bf; line-height: 1.45; }}
     .toolbar {{
       display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem;
       background: var(--card); border: 1px solid var(--border); border-radius: 10px;
@@ -482,7 +722,8 @@ def build_html(
 <body>
   <div class="wrap">
     <h1>Security news digest</h1>
-    <p class="meta">Generated {html_module.escape(when)} · <span id="visibleCount">{len(items)}</span> shown</p>
+    <p class="meta">Generated {html_module.escape(when)} · <span id="visibleCount">{len(items)}</span> shown<br/>
+    <span class="submeta">{gemini_note_esc}</span></p>
     <div class="toolbar">
       <label>Show articles from last
         <input type="number" id="dayWindow" min="1" max="3650" value="{day_default}"/>
@@ -572,6 +813,55 @@ def main() -> int:
         metavar="N",
         help="Only include items published in the last N days (requires parseable dates; others are dropped).",
     )
+    parser.add_argument(
+        "--gemini",
+        action="store_true",
+        help="Rewrite summary+analysis with Gemini (needs GEMINI_API_KEY or GOOGLE_API_KEY). "
+        "Uses chunked requests + pauses to reduce 429 quota errors on the free tier.",
+    )
+    parser.add_argument(
+        "--gemini-model",
+        default="gemini-3-flash-preview",
+        help="Model id for generateContent (default: Gemini 3 Flash preview). "
+        "Live-only ids (e.g. gemini-3.1-flash-live-preview) are not supported here—use AI Studio ListModels.",
+    )
+    parser.add_argument(
+        "--gemini-max-excerpt-chars",
+        type=int,
+        default=480,
+        help="Max RSS excerpt chars per article sent to Gemini (smaller = fewer input tokens).",
+    )
+    parser.add_argument(
+        "--gemini-max-output-tokens",
+        type=int,
+        default=8192,
+        help="Max output tokens per Gemini chunk response.",
+    )
+    parser.add_argument(
+        "--gemini-timeout",
+        type=int,
+        default=180,
+        help="Gemini HTTP timeout in seconds per chunk request.",
+    )
+    parser.add_argument(
+        "--gemini-chunk-size",
+        type=int,
+        default=6,
+        metavar="N",
+        help="Articles per Gemini request (smaller reduces input-token bursts). Use 0 for one request for all.",
+    )
+    parser.add_argument(
+        "--gemini-chunk-pause",
+        type=float,
+        default=28.0,
+        help="Seconds to sleep between Gemini chunks (helps free-tier requests/minute).",
+    )
+    parser.add_argument(
+        "--gemini-retries",
+        type=int,
+        default=7,
+        help="Retries per chunk on 429 / RESOURCE_EXHAUSTED (uses server 'retry in Xs' when present).",
+    )
     args = parser.parse_args()
 
     if args.days is not None and args.days < 1:
@@ -603,10 +893,36 @@ def main() -> int:
             )
     items = items[: args.limit]
 
+    gemini_model_used: str | None = None
+    if args.gemini:
+        key = gemini_api_key()
+        if not key:
+            print(
+                "Error: --gemini requires GEMINI_API_KEY or GOOGLE_API_KEY in the environment.",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            items = gemini_batch_enrich(
+                items,
+                api_key=key,
+                model=args.gemini_model,
+                max_excerpt_chars=args.gemini_max_excerpt_chars,
+                max_output_tokens=args.gemini_max_output_tokens,
+                request_timeout_s=args.gemini_timeout,
+                chunk_size=args.gemini_chunk_size,
+                chunk_pause_s=args.gemini_chunk_pause,
+                max_retries=args.gemini_retries,
+            )
+            gemini_model_used = args.gemini_model
+            print(f"Gemini batch enrichment OK ({args.gemini_model}, {len(items)} articles).", file=sys.stderr)
+        except Exception as exc:  # noqa: BLE001
+            print(f"Gemini batch failed; keeping RSS/heuristic text: {exc}", file=sys.stderr)
+
     if args.html:
         out = Path(args.html)
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(build_html(items, server_days=server_days), encoding="utf-8")
+        out.write_text(build_html(items, server_days=server_days, gemini_model=gemini_model_used), encoding="utf-8")
         print(f"Wrote {out.resolve()} ({len(items)} items).", file=sys.stderr)
 
     if args.json:
