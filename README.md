@@ -122,7 +122,8 @@ Without **`--gemini`**, the digest keeps the RSS blurb as summary and sets categ
 Workflow: [`.github/workflows/vietnam-news-daily.yml`](.github/workflows/vietnam-news-daily.yml).
 
 - **Cron:** `0 22 * * *` **UTC** → **05:00** on the **next calendar day** in **Vietnam** (ICT, **UTC+7**). GitHub Actions cron is always UTC; [scheduled runs](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#schedule) may slip slightly.
-- **Artifact:** each run uploads **`vietnam-news`** (zip with `index.html`). This workflow does **not** deploy GitHub Pages (to avoid overwriting the security digest site in the same `output/` root); download the artifact or merge into your own Pages pipeline if needed.
+- **GitHub Pages:** the same deploy pattern as the security workflow: build **Vietnam** + **security** HTML into **`output/`**, then **deploy** to Pages. After the first run, open **Settings → Pages** (or the **`github-pages`** environment URL on the run) and use **`/vietnam/`** for the Vietnamese digest.
+- **Artifact:** each run still uploads **`vietnam-news`** (zip with the Vietnam `index.html`) for offline download.
 
 ### Other scripts
 
@@ -163,7 +164,7 @@ Repository secrets (usual case)
 
 ## GitHub Pages (public URL)
 
-The workflow [`.github/workflows/security-news-daily.yml`](.github/workflows/security-news-daily.yml) builds **`output/index.html`** and deploys the whole **`output/`** directory to **GitHub Pages** on every run (schedule + manual).
+The workflow [`.github/workflows/security-news-daily.yml`](.github/workflows/security-news-daily.yml) and [`.github/workflows/vietnam-news-daily.yml`](.github/workflows/vietnam-news-daily.yml) each build **both** digests (`output/index.html` and `output/vietnam/index.html`) then deploy the whole **`output/`** directory to **GitHub Pages** (they share the `pages` concurrency group so deploys do not overlap).
 
 ### One-time repository settings
 
@@ -180,7 +181,7 @@ The first **deploy** job may ask you to **review and enable** the `github-pages`
 | User/org site repo named `username.github.io` | `https://username.github.io/` |
 | Normal project repo `username/reports` | `https://username.github.io/reports/` |
 
-The digest is at the site root because the artifact contains **`index.html`**.
+The security digest is at the site root (**`index.html`**). The Vietnam digest is at **`vietnam/index.html`** (for a project repo `https://user.github.io/reports/`, open **`https://user.github.io/reports/vietnam/`** or **`.../vietnam/index.html`**).
 
 After a successful run, open **Actions** → latest workflow → **deploy** job → **github-pages** environment link, or check **Settings → Pages** for the live URL.
 
@@ -188,9 +189,9 @@ After a successful run, open **Actions** → latest workflow → **deploy** job 
 
 ### Schedule and workflow artifact
 
-- **Schedule:** `08:15` UTC daily (`cron` in the workflow file); [scheduled runs](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#schedule) can be delayed slightly on GitHub’s side.
+- **Schedule:** `01:00` UTC daily (`cron` in the workflow file); [scheduled runs](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#schedule) can be delayed slightly on GitHub’s side.
 - **Manual run:** **Actions** → **Security news digest** → **Run workflow**.
-- **Artifact:** each run still uploads **`security-news`** (zip with `index.html`) for offline download.
+- **Artifact:** each run uploads **`security-news`** (zip with `index.html`) for offline download. The deployed site also includes **`vietnam/index.html`** when the Vietnam workflow (or this workflow’s Vietnam build step) has run.
 
 Edit the workflow YAML to change `--days`, `--limit`, `--per-source`, or `cron`.
 

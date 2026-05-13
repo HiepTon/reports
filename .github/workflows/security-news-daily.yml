@@ -21,16 +21,20 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: requirements-security-news.txt
+          cache-dependency-path: |
+            requirements-security-news.txt
+            requirements-vietnam-news.txt
 
       - name: Install dependencies
-        run: pip install -r requirements-security-news.txt
+        run: |
+          pip install -r requirements-security-news.txt
+          pip install -r requirements-vietnam-news.txt
 
       - name: Build site (index.html for Pages root)
         env:
@@ -55,16 +59,36 @@ jobs:
             --gemini-max-excerpt-chars 450 \
             $GEMINI_FLAG
 
+      - name: Build Vietnam digest (for /vietnam/)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          set -e
+          GEMINI_FLAG=""
+          if [ -n "${GEMINI_API_KEY:-}" ]; then
+            GEMINI_FLAG="--gemini"
+            echo "GEMINI_API_KEY set: enabling Gemini for Vietnam digest."
+          else
+            echo "GEMINI_API_KEY not set: Vietnam digest uses RSS excerpts only."
+          fi
+          python scripts/fetch_vietnam_news.py \
+            --days 3 \
+            --per-source 12 \
+            --limit 24 \
+            --pause 0.3 \
+            --html output/vietnam/index.html \
+            $GEMINI_FLAG
+
       - name: Disable Jekyll (static HTML only)
         run: touch output/.nojekyll
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: output/
 
       - name: Upload HTML copy as workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: security-news
           path: output/index.html
@@ -79,4 +103,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
