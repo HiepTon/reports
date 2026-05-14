@@ -38,7 +38,9 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 from digest_reader_embed import (
+    READ_NEWS_SUMMARY_FALLBACK_MODEL_DEFAULT,
     READ_NEWS_SUMMARY_MODEL_DEFAULT,
+    READ_NEWS_TTS_FALLBACK_MODEL_DEFAULT,
     READ_NEWS_TTS_MODEL_DEFAULT,
     READ_NEWS_VOICE_DEFAULT,
     digest_reader_css,
@@ -281,6 +283,45 @@ def _gemini_retry_sleep_seconds(exc: BaseException, attempt: int) -> float:
     return min(15.0 * (2**attempt), 120.0)
 
 
+def _gemini_transient_retryable(exc: BaseException) -> bool:
+    """429/quota plus typical overload / capacity messages (retry with backoff or fallback model)."""
+    if _is_gemini_rate_limit(exc):
+        return True
+    msg_l = str(exc).lower()
+    for needle in (
+        "high demand",
+        "try again later",
+        "overloaded",
+        "temporarily unavailable",
+        "service unavailable",
+    ):
+        if needle in msg_l:
+            return True
+    try:
+        from google.genai import errors as genai_errors
+
+        if isinstance(exc, genai_errors.APIError):
+            code = getattr(exc, "code", None)
+            if code in (500, 503):
+                return True
+    except ImportError:
+        pass
+    u = str(exc).upper()
+    return "UNAVAILABLE" in u
+
+
+def _gemini_model_candidates(primary: str, fallback: str | None) -> list[str]:
+    p = (primary or "").strip()
+    out: list[str] = []
+    if p:
+        out.append(p)
+    if fallback:
+        f = fallback.strip()
+        if f and f.lower() != p.lower():
+            out.append(f)
+    return out
+
+
 def _parse_gemini_json_list(raw_text: str) -> list[dict]:
     try:
         parsed = json.loads(strip_json_fenced_text(raw_text))
@@ -367,19 +408,21 @@ def gemini_batch_enrich(
     *,
     api_key: str,
     model: str,
+    model_fallback: str | None = None,
     max_excerpt_chars: int,
     max_output_tokens: int,
     request_timeout_s: int,
     chunk_size: int,
     chunk_pause_s: float,
     max_retries: int,
-) -> list[NewsItem]:
+) -> tuple[list[NewsItem], bool]:
     """
     Rewrite summaries/analysis via Gemini using chunked API calls and pauses to respect
-    free-tier tokens-per-minute / requests-per-minute, with retries on 429 RESOURCE_EXHAUSTED.
+    free-tier tokens-per-minute / requests-per-minute, with retries on transient errors,
+    then optional fallback model per chunk.
     """
     if not items:
-        return items
+        return items, False
 
     try:
         from google import genai
@@ -406,68 +449,97 @@ def gemini_batch_enrich(
 
     client = genai.Client(api_key=api_key)
     out = list(items)
+    used_fallback = False
+    model_candidates = _gemini_model_candidates(model, model_fallback)
 
     for start in range(0, n, chunk_size):
         end = min(start + chunk_size, n)
         indices = list(range(start, end))
         payload = _gemini_payload_for_indices(out, indices, max_excerpt_chars)
         prompt = instructions + json.dumps(payload, ensure_ascii=False)
-        tokens_this_chunk = min(max_output_tokens, max(2048, 450 * len(indices)))
 
-        for attempt in range(max_retries):
-            try:
-                resp = client.models.generate_content(
-                    model=model,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        temperature=0.35,
-                        max_output_tokens=tokens_this_chunk,
-                        response_mime_type="application/json",
-                        http_options=types.HttpOptions(timeout=request_timeout_s * 1000),
-                    ),
-                )
-                raw_text = (getattr(resp, "text", None) or "").strip()
-                if not raw_text:
-                    pf = getattr(resp, "prompt_feedback", None)
-                    raise RuntimeError(f"Gemini returned empty text. prompt_feedback={pf!r}")
+        chunk_ok = False
+        last_err: BaseException | None = None
 
-                rows = _parse_gemini_json_list(raw_text)
-                if len(rows) != len(indices):
-                    print(
-                        f"Warning: Gemini returned {len(rows)} rows for chunk indices {start}-{end - 1}, "
-                        f"expected {len(indices)}; merging partial results.",
-                        file=sys.stderr,
+        for mi, active_model in enumerate(model_candidates):
+            for attempt in range(max_retries):
+                tokens_this_chunk = min(max_output_tokens, max(2048, 450 * len(indices)))
+                try:
+                    resp = client.models.generate_content(
+                        model=active_model,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            temperature=0.35,
+                            max_output_tokens=tokens_this_chunk,
+                            response_mime_type="application/json",
+                            http_options=types.HttpOptions(timeout=request_timeout_s * 1000),
+                        ),
                     )
-                by_i, by_l = _rows_to_index_maps(rows)
-                _apply_gemini_rows(out, indices, by_i, by_l)
+                    raw_text = (getattr(resp, "text", None) or "").strip()
+                    if not raw_text:
+                        pf = getattr(resp, "prompt_feedback", None)
+                        raise RuntimeError(f"Gemini returned empty text. prompt_feedback={pf!r}")
+
+                    rows = _parse_gemini_json_list(raw_text)
+                    if len(rows) != len(indices):
+                        print(
+                            f"Warning: Gemini returned {len(rows)} rows for chunk indices {start}-{end - 1}, "
+                            f"expected {len(indices)}; merging partial results.",
+                            file=sys.stderr,
+                        )
+                    by_i, by_l = _rows_to_index_maps(rows)
+                    _apply_gemini_rows(out, indices, by_i, by_l)
+                    chunk_ok = True
+                    if mi > 0:
+                        used_fallback = True
+                        print(
+                            f"Gemini chunk {start}-{end - 1}: OK using fallback model {active_model!r}.",
+                            file=sys.stderr,
+                        )
+                    break
+                except genai_errors.APIError as exc:
+                    last_err = exc
+                    if _gemini_transient_retryable(exc) and attempt < max_retries - 1:
+                        delay = _gemini_retry_sleep_seconds(exc, attempt)
+                        print(
+                            f"Gemini transient error on chunk {start}-{end - 1} ({exc!s}); sleeping {delay:.1f}s "
+                            f"(retry {attempt + 2}/{max_retries}, model={active_model!r}).",
+                            file=sys.stderr,
+                        )
+                        time.sleep(delay)
+                        continue
+                    break
+                except Exception as exc:
+                    last_err = exc
+                    if _gemini_transient_retryable(exc) and attempt < max_retries - 1:
+                        delay = _gemini_retry_sleep_seconds(exc, attempt)
+                        print(
+                            f"Gemini transient error on chunk {start}-{end - 1} ({exc!s}); sleeping {delay:.1f}s "
+                            f"(retry {attempt + 2}/{max_retries}, model={active_model!r}).",
+                            file=sys.stderr,
+                        )
+                        time.sleep(delay)
+                        continue
+                    break
+
+            if chunk_ok:
                 break
-            except genai_errors.APIError as exc:
-                if _is_gemini_rate_limit(exc) and attempt < max_retries - 1:
-                    delay = _gemini_retry_sleep_seconds(exc, attempt)
-                    print(
-                        f"Gemini 429 / quota on chunk {start}-{end - 1}; sleeping {delay:.1f}s "
-                        f"(retry {attempt + 2}/{max_retries}).",
-                        file=sys.stderr,
-                    )
-                    time.sleep(delay)
-                    continue
-                raise
-            except Exception as exc:
-                if _is_gemini_rate_limit(exc) and attempt < max_retries - 1:
-                    delay = _gemini_retry_sleep_seconds(exc, attempt)
-                    print(
-                        f"Gemini rate/quota error on chunk {start}-{end - 1}; sleeping {delay:.1f}s "
-                        f"(retry {attempt + 2}/{max_retries}).",
-                        file=sys.stderr,
-                    )
-                    time.sleep(delay)
-                    continue
-                raise
+
+            if mi < len(model_candidates) - 1:
+                print(
+                    f"Gemini chunk {start}-{end - 1}: model {active_model!r} failed ({last_err!s}); "
+                    f"retrying with {model_candidates[mi + 1]!r}.",
+                    file=sys.stderr,
+                )
+
+        if not chunk_ok:
+            assert last_err is not None
+            raise last_err
 
         if end < n and chunk_pause_s > 0:
             time.sleep(chunk_pause_s)
 
-    return out
+    return out, used_fallback
 
 
 _DEFAULT_UA = (
@@ -611,6 +683,8 @@ def build_html(
     read_news_summary_model: str = READ_NEWS_SUMMARY_MODEL_DEFAULT,
     read_news_tts_model: str = READ_NEWS_TTS_MODEL_DEFAULT,
     read_news_voice: str = READ_NEWS_VOICE_DEFAULT,
+    read_news_summary_model_fallback: str | None = None,
+    read_news_tts_model_fallback: str | None = None,
 ) -> str:
     when = (generated_at or datetime.now(timezone.utc)).strftime("%Y-%m-%d %H:%M UTC")
     day_default = str(server_days if server_days is not None else 14)
@@ -804,7 +878,14 @@ def build_html(
 }})();
   </script>
   <script>
-{digest_reader_script(lang="en", summary_model=read_news_summary_model, tts_model=read_news_tts_model, voice=read_news_voice)}
+{digest_reader_script(
+        lang="en",
+        summary_model=read_news_summary_model,
+        tts_model=read_news_tts_model,
+        voice=read_news_voice,
+        summary_model_fallback=read_news_summary_model_fallback,
+        tts_model_fallback=read_news_tts_model_fallback,
+    )}
   </script>
 </body>
 </html>
@@ -852,9 +933,15 @@ def main() -> int:
     )
     parser.add_argument(
         "--gemini-model",
-        default="gemini-3-flash-preview",
-        help="Model id for generateContent (default: Gemini 3 Flash preview). "
+        default="gemini-3.1-flash-lite",
+        help="Model id for generateContent (default: Gemini 3.1 Flash Lite). "
         "Live-only ids (e.g. gemini-3.1-flash-live-preview) are not supported here—use AI Studio ListModels.",
+    )
+    parser.add_argument(
+        "--gemini-model-fallback",
+        default=READ_NEWS_SUMMARY_FALLBACK_MODEL_DEFAULT,
+        metavar="MODEL_ID",
+        help="If the primary model fails after retries, retry each chunk with this model (default: Gemini 2.5 Flash Lite).",
     )
     parser.add_argument(
         "--gemini-max-excerpt-chars",
@@ -891,7 +978,7 @@ def main() -> int:
         "--gemini-retries",
         type=int,
         default=7,
-        help="Retries per chunk on 429 / RESOURCE_EXHAUSTED (uses server 'retry in Xs' when present).",
+        help="Retries per chunk on transient Gemini errors (429, overload, 503, etc.; uses server 'retry in Xs' when present).",
     )
     parser.add_argument(
         "--read-news-summary-model",
@@ -906,10 +993,16 @@ def main() -> int:
         help="Gemini TTS model for speech audio (generateContent + AUDIO).",
     )
     parser.add_argument(
-        "--read-news-voice",
-        default=READ_NEWS_VOICE_DEFAULT,
-        metavar="NAME",
-        help="Prebuilt Gemini TTS voice (e.g. Enceladus, Kore).",
+        "--read-news-summary-fallback-model",
+        default=READ_NEWS_SUMMARY_FALLBACK_MODEL_DEFAULT,
+        metavar="MODEL_ID",
+        help="Browser read-aloud: fallback if summary prep fails on the primary model.",
+    )
+    parser.add_argument(
+        "--read-news-tts-fallback-model",
+        default=READ_NEWS_TTS_FALLBACK_MODEL_DEFAULT,
+        metavar="MODEL_ID",
+        help="Browser read-aloud: fallback TTS model if the primary fails.",
     )
     args = parser.parse_args()
 
@@ -952,10 +1045,11 @@ def main() -> int:
             )
             return 2
         try:
-            items = gemini_batch_enrich(
+            items, gemini_used_fallback = gemini_batch_enrich(
                 items,
                 api_key=key,
                 model=args.gemini_model,
+                model_fallback=args.gemini_model_fallback,
                 max_excerpt_chars=args.gemini_max_excerpt_chars,
                 max_output_tokens=args.gemini_max_output_tokens,
                 request_timeout_s=args.gemini_timeout,
@@ -964,7 +1058,12 @@ def main() -> int:
                 max_retries=args.gemini_retries,
             )
             gemini_model_used = args.gemini_model
-            print(f"Gemini batch enrichment OK ({args.gemini_model}, {len(items)} articles).", file=sys.stderr)
+            if gemini_used_fallback:
+                gemini_model_used = f"{args.gemini_model} (fallback used: {args.gemini_model_fallback})"
+            print(
+                f"Gemini batch enrichment OK ({gemini_model_used}, {len(items)} articles).",
+                file=sys.stderr,
+            )
         except Exception as exc:  # noqa: BLE001
             print(f"Gemini batch failed; keeping RSS/heuristic text: {exc}", file=sys.stderr)
 
@@ -979,6 +1078,8 @@ def main() -> int:
                 read_news_summary_model=args.read_news_summary_model,
                 read_news_tts_model=args.read_news_tts_model,
                 read_news_voice=args.read_news_voice,
+                read_news_summary_model_fallback=args.read_news_summary_fallback_model,
+                read_news_tts_model_fallback=args.read_news_tts_fallback_model,
             ),
             encoding="utf-8",
         )

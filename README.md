@@ -67,7 +67,7 @@ python scripts/fetch_security_news.py --days 7 --limit 25 --gemini --html output
 
 **Free tier / 429 RESOURCE_EXHAUSTED:** the script defaults to **several small API calls** (`--gemini-chunk-size` default **6** articles) with a **pause between chunks** (`--gemini-chunk-pause`, default **28s**) and **retries** that honor Google’s “retry in Xs” hint (`--gemini-retries`, default **7**). That reduces spikes in **input tokens per minute** and **requests per minute**. You can tighten further: `--gemini-chunk-size 4 --gemini-chunk-pause 35 --gemini-max-excerpt-chars 400`.
 
-Default model is **`gemini-3-flash-preview`** (Gemini 3 Flash), which supports the **`generateContent`** API this script uses. **Gemini 3.x “Flash Live”** models (for example `gemini-3.1-flash-live-preview`) are for the **Live API** (WebSocket), not `generateContent`—using them here returns **404**. Override with **`--gemini-model`** to any id your key supports (check **List models** in [Google AI Studio](https://aistudio.google.com/)).
+Default model is **`gemini-3.1-flash-lite`** (Gemini 3.1 Flash Lite), aimed at lower quota pressure than larger Flash models on **`generateContent`**. **Gemini 3.x “Flash Live”** models (for example `gemini-3.1-flash-live-preview`) are for the **Live API** (WebSocket), not `generateContent`—using them here returns **404**. Override with **`--gemini-model`** to any id your key supports (check **List models** in [Google AI Studio](https://aistudio.google.com/)).
 
 Tuning flags: **`--gemini-max-excerpt-chars`** (default 480), **`--gemini-max-output-tokens`**, **`--gemini-timeout`**, **`--gemini-chunk-size`** (use **0** for a single request containing every article—higher 429 risk on free tier).
 
