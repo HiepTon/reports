@@ -993,6 +993,12 @@ def main() -> int:
         help="Gemini TTS model for speech audio (generateContent + AUDIO).",
     )
     parser.add_argument(
+        "--read-news-voice",
+        default=READ_NEWS_VOICE_DEFAULT,
+        metavar="NAME",
+        help="Prebuilt Gemini TTS voice (e.g. Enceladus, Kore).",
+    )
+    parser.add_argument(
         "--read-news-summary-fallback-model",
         default=READ_NEWS_SUMMARY_FALLBACK_MODEL_DEFAULT,
         metavar="MODEL_ID",
