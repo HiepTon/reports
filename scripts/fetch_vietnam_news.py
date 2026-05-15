@@ -4,7 +4,7 @@ Tổng hợp tin RSS từ các báo Việt Nam, tóm tắt và gắn nhóm chủ
 
 Vietnam news digest: fetch RSS (Tuổi Trẻ, Thanh Niên, Dân Trí fetched first; global sort newest-first with
 priority tie-break). After date filtering, Tuổi Trẻ (tuoitre.vn) items are listed first, then **`--limit`** keeps the top N in that order (Tuổi Trẻ fills the digest until the cap).
-Optional --gemini for Vietnamese summaries + categories.
+Optional --gemini for Vietnamese summaries + categories (by default loads each article page and extracts text for the model; use --gemini-no-fetch-article for RSS-only).
 
 Usage:
   pip install -r requirements-vietnam-news.txt
@@ -228,6 +228,10 @@ def filter_by_recent_days(items: list[VietnamNewsItem], days: int) -> tuple[list
 _DEFAULT_UA = (
     "Mozilla/5.0 (compatible; reports-fetch_vietnam_news/1.0) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+_ARTICLE_PAGE_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
 )
 
 
@@ -534,22 +538,78 @@ def _rows_to_maps(rows: list) -> tuple[dict[int, dict], dict[str, dict]]:
     return by_index, by_link
 
 
-def _payload_for_indices(out: list[VietnamNewsItem], indices: list[int], max_excerpt_chars: int) -> list[dict]:
+def _truncate_for_gemini(text: str, max_chars: int) -> str:
+    t = (text or "").strip()
+    if len(t) > max_chars:
+        return t[: max_chars - 1].rsplit(" ", 1)[0] + "…"
+    return t
+
+
+def _fetch_article_bodies_chunk_vn(
+    out: list[VietnamNewsItem],
+    indices: list[int],
+    *,
+    timeout: int,
+    max_bytes: int,
+    max_chars: int,
+    pause_s: float,
+    user_agent: str,
+    accept_language: str,
+) -> dict[int, str]:
+    from article_fetch import fetch_article_plain_text
+
+    bodies: dict[int, str] = {}
+    for ii, i in enumerate(indices):
+        if pause_s > 0 and ii > 0:
+            time.sleep(pause_s)
+        it = out[i]
+        try:
+            text = fetch_article_plain_text(
+                it.link,
+                timeout=timeout,
+                max_bytes=max_bytes,
+                max_chars=max_chars,
+                user_agent=user_agent,
+                accept_language=accept_language,
+            )
+            if len(text.strip()) < 60:
+                raise RuntimeError("extracted article text too short")
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"Cảnh báo: không lấy được nội dung bài [{it.source_name}] {it.link}: {exc}",
+                file=sys.stderr,
+            )
+            bodies[i] = (it.summary or "").strip() or "(Không có nội dung.)"
+        else:
+            bodies[i] = text
+    return bodies
+
+
+def _gemini_payload_rows_vn(
+    out: list[VietnamNewsItem],
+    indices: list[int],
+    bodies: dict[int, str],
+    *,
+    full_article: bool,
+    max_article_chars: int,
+    max_excerpt_chars: int,
+) -> list[dict]:
+    cap = max_article_chars if full_article else max_excerpt_chars
     payload: list[dict] = []
     for i in indices:
         it = out[i]
-        excerpt = it.summary
-        if len(excerpt) > max_excerpt_chars:
-            excerpt = excerpt[: max_excerpt_chars - 1].rsplit(" ", 1)[0] + "…"
-        payload.append(
-            {
-                "index": i,
-                "link": it.link,
-                "source": it.source_name,
-                "title": it.topic,
-                "rss_excerpt": excerpt,
-            }
-        )
+        body = _truncate_for_gemini(bodies.get(i, it.summary), cap)
+        row: dict = {
+            "index": i,
+            "link": it.link,
+            "source": it.source_name,
+            "title": it.topic,
+        }
+        if full_article:
+            row["article_plain_text"] = body
+        else:
+            row["rss_excerpt"] = body
+        payload.append(row)
     return payload
 
 
@@ -559,7 +619,14 @@ def gemini_vietnam_enrich(
     api_key: str,
     model: str,
     model_fallback: str | None = None,
-    max_excerpt_chars: int,
+    full_article: bool = True,
+    article_fetch_timeout_s: int = 30,
+    article_max_bytes: int = 2_500_000,
+    article_fetch_pause_s: float = 0.35,
+    article_user_agent: str = _ARTICLE_PAGE_UA,
+    article_accept_language: str = "vi-VN,vi;q=0.9,en;q=0.8",
+    max_article_chars: int = 16_000,
+    max_excerpt_chars: int = 480,
     max_output_tokens: int,
     request_timeout_s: int,
     chunk_size: int,
@@ -577,17 +644,32 @@ def gemini_vietnam_enrich(
         raise RuntimeError("Install google-genai (see requirements-vietnam-news.txt).") from exc
 
     cats_literal = " | ".join(VIETNAM_CATEGORY_LABELS)
-    instructions = (
-        "Bạn là biên tập viên tin tức Việt Nam. Bạn chỉ nhận tiêu đề, nguồn và đoạn mô tả RSS — không có toàn văn bài báo. "
-        "Không bịa sự kiện, con số hay trích dẫn không có trong dữ liệu.\n\n"
-        "Trả về DUY NHẤT một mảng JSON (không dùng markdown). Mỗi phần tử là object với các khóa đúng: "
-        '"index" (số nguyên khớp input), "link" (chuỗi giống input), '
-        '"summary" (2–4 câu tiếng Việt, dễ đọc), '
-        f'"category" (chuỗi, PHẢI là một trong các nhãn sau, đúng chính tả: {cats_literal}).\n\n'
-        "Trong summary/category chỉ dùng chuỗi JSON hợp lệ: không xuống dòng thô trong string; dùng \\n nếu cần.\n\n"
-        "Mảng phải cùng độ dài và cùng các index như danh sách đầu vào.\n\n"
-        "INPUT_ARTICLES_JSON:\n"
-    )
+    if full_article:
+        instructions = (
+            "Bạn là biên tập viên tin tức Việt Nam. Mỗi mục có metadata và `article_plain_text`: "
+            "văn bản thu được từ trang bài báo (đã loại bớt menu/quảng cáo; có thể không đầy đủ). "
+            "Dựa vào đó và tiêu đề để viết summary và chọn category; không bịa sự kiện, con số hay trích dẫn "
+            "không có trong nội dung. Nếu văn bản quá mỏng hoặc không rõ, nêu điều đã được hỗ trợ và giữ thận trọng.\n\n"
+            "Trả về DUY NHẤT một mảng JSON (không dùng markdown). Mỗi phần tử là object với các khóa đúng: "
+            '"index" (số nguyên khớp input), "link" (chuỗi giống input), '
+            '"summary" (2–4 câu tiếng Việt, dễ đọc), '
+            f'"category" (chuỗi, PHẢI là một trong các nhãn sau, đúng chính tả: {cats_literal}).\n\n'
+            "Trong summary/category chỉ dùng chuỗi JSON hợp lệ: không xuống dòng thô trong string; dùng \\n nếu cần.\n\n"
+            "Mảng phải cùng độ dài và cùng các index như danh sách đầu vào.\n\n"
+            "INPUT_ARTICLES_JSON:\n"
+        )
+    else:
+        instructions = (
+            "Bạn là biên tập viên tin tức Việt Nam. Bạn chỉ nhận tiêu đề, nguồn và đoạn mô tả RSS — không có toàn văn bài báo. "
+            "Không bịa sự kiện, con số hay trích dẫn không có trong dữ liệu.\n\n"
+            "Trả về DUY NHẤT một mảng JSON (không dùng markdown). Mỗi phần tử là object với các khóa đúng: "
+            '"index" (số nguyên khớp input), "link" (chuỗi giống input), '
+            '"summary" (2–4 câu tiếng Việt, dễ đọc), '
+            f'"category" (chuỗi, PHẢI là một trong các nhãn sau, đúng chính tả: {cats_literal}).\n\n'
+            "Trong summary/category chỉ dùng chuỗi JSON hợp lệ: không xuống dòng thô trong string; dùng \\n nếu cần.\n\n"
+            "Mảng phải cùng độ dài và cùng các index như danh sách đầu vào.\n\n"
+            "INPUT_ARTICLES_JSON:\n"
+        )
 
     n = len(items)
     if chunk_size <= 0 or chunk_size > n:
@@ -601,7 +683,27 @@ def gemini_vietnam_enrich(
     for start in range(0, n, chunk_size):
         end = min(start + chunk_size, n)
         indices = list(range(start, end))
-        payload = _payload_for_indices(out, indices, max_excerpt_chars)
+        if full_article:
+            bodies = _fetch_article_bodies_chunk_vn(
+                out,
+                indices,
+                timeout=article_fetch_timeout_s,
+                max_bytes=article_max_bytes,
+                max_chars=max_article_chars,
+                pause_s=article_fetch_pause_s,
+                user_agent=article_user_agent,
+                accept_language=article_accept_language,
+            )
+        else:
+            bodies = {i: out[i].summary for i in indices}
+        payload = _gemini_payload_rows_vn(
+            out,
+            indices,
+            bodies,
+            full_article=full_article,
+            max_article_chars=max_article_chars,
+            max_excerpt_chars=max_excerpt_chars,
+        )
         prompt = instructions + json.dumps(payload, ensure_ascii=False)
 
         chunk_ok = False
@@ -609,7 +711,8 @@ def gemini_vietnam_enrich(
 
         for mi, active_model in enumerate(model_candidates):
             for attempt in range(max_retries):
-                base_cap = min(max_output_tokens, max(2048, 500 * len(indices)))
+                approx_in = sum(len(bodies.get(i, "")) for i in indices)
+                base_cap = min(max_output_tokens, max(2048, 500 * len(indices) + approx_in // 6))
                 tokens_this_chunk = min(max_output_tokens, int(base_cap * (1.4**attempt)))
 
                 try:
@@ -748,6 +851,7 @@ def build_html(
     generated_at: datetime | None = None,
     server_days: int | None = None,
     gemini_model: str | None = None,
+    gemini_article_pages: bool = False,
     read_news_summary_model: str = READ_NEWS_SUMMARY_MODEL_DEFAULT,
     read_news_tts_model: str = READ_NEWS_TTS_MODEL_DEFAULT,
     read_news_voice: str = READ_NEWS_VOICE_DEFAULT,
@@ -762,7 +866,16 @@ def build_html(
         else "Không lọc ngày trên server; dùng ô bên dưới để lọc trong trình duyệt."
     )
     if gemini_model:
-        ai_note = f"Tóm tắt và nhóm chủ đề: Google Gemini ({gemini_model}), theo đoạn RSS. Tin Tuổi Trẻ (tuoitre.vn) hiển thị trước trong mục tin nổi bật."
+        if gemini_article_pages:
+            ai_note = (
+                f"Tóm tắt và nhóm chủ đề: Google Gemini ({gemini_model}), theo văn bản trích từ trang bài báo "
+                f"(không chỉ RSS). Tin Tuổi Trẻ (tuoitre.vn) hiển thị trước trong mục tin nổi bật."
+            )
+        else:
+            ai_note = (
+                f"Tóm tắt và nhóm chủ đề: Google Gemini ({gemini_model}), theo đoạn RSS. "
+                f"Tin Tuổi Trẻ (tuoitre.vn) hiển thị trước trong mục tin nổi bật."
+            )
     else:
         ai_note = "Tóm tắt từ RSS; nhóm chủ đề: Chưa phân loại (chạy với --gemini để dùng AI). Tin Tuổi Trẻ hiển thị trước trong mục tin nổi bật."
 
@@ -953,7 +1066,16 @@ def main() -> int:
         metavar="MODEL_ID",
         help="Nếu model chính thất bại sau các lần thử, thử lại từng chunk với model này.",
     )
-    parser.add_argument("--gemini-max-excerpt-chars", type=int, default=480)
+    parser.add_argument("--gemini-max-excerpt-chars", type=int, default=480, help="Với --gemini-no-fetch-article: giới hạn ký tự mô tả RSS gửi Gemini.")
+    parser.add_argument(
+        "--gemini-no-fetch-article",
+        action="store_true",
+        help="Không tải trang bài báo; chỉ dùng mô tả RSS cho Gemini.",
+    )
+    parser.add_argument("--gemini-article-timeout", type=int, default=30, help="Timeout HTTP (giây) khi tải HTML bài báo.")
+    parser.add_argument("--gemini-article-max-bytes", type=int, default=2_500_000, metavar="N", help="Giới hạn bytes HTML mỗi bài.")
+    parser.add_argument("--gemini-article-fetch-pause", type=float, default=0.35, help="Giây nghỉ giữa các lần tải trang (lịch sự).")
+    parser.add_argument("--gemini-max-article-chars", type=int, default=16_000, help="Tối đa ký tự plain text/bài gửi Gemini.")
     parser.add_argument("--gemini-max-output-tokens", type=int, default=8192)
     parser.add_argument("--gemini-timeout", type=int, default=180)
     parser.add_argument("--gemini-chunk-size", type=int, default=6)
@@ -1026,11 +1148,22 @@ def main() -> int:
             print("Cần GEMINI_API_KEY hoặc GOOGLE_API_KEY khi dùng --gemini.", file=sys.stderr)
             return 2
         try:
+            if not args.gemini_no_fetch_article:
+                print(
+                    "Gemini: đang tải từng trang bài và trích văn bản để tóm tắt "
+                    "(thêm --gemini-no-fetch-article nếu chỉ muốn RSS).",
+                    file=sys.stderr,
+                )
             items, vn_fallback_used = gemini_vietnam_enrich(
                 items,
                 api_key=key,
                 model=args.gemini_model,
                 model_fallback=args.gemini_model_fallback,
+                full_article=not args.gemini_no_fetch_article,
+                article_fetch_timeout_s=args.gemini_article_timeout,
+                article_max_bytes=args.gemini_article_max_bytes,
+                article_fetch_pause_s=args.gemini_article_fetch_pause,
+                max_article_chars=args.gemini_max_article_chars,
                 max_excerpt_chars=args.gemini_max_excerpt_chars,
                 max_output_tokens=args.gemini_max_output_tokens,
                 request_timeout_s=args.gemini_timeout,
@@ -1053,6 +1186,7 @@ def main() -> int:
                 items,
                 server_days=server_days,
                 gemini_model=gemini_model_used,
+                gemini_article_pages=bool(gemini_model_used) and not args.gemini_no_fetch_article,
                 read_news_summary_model=args.read_news_summary_model,
                 read_news_tts_model=args.read_news_tts_model,
                 read_news_voice=args.read_news_voice,

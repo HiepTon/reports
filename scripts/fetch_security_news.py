@@ -4,7 +4,8 @@ Fetch recent headlines from major security news RSS/Atom feeds.
 
 Produces topic (title), summary, analysis, and canonical link. By default summaries come from RSS
 and analysis from local heuristics; with --gemini and GEMINI_API_KEY, Gemini rewrites summary and
-analysis in small batches (fewer tokens per request, pauses + retries on 429) to fit free-tier limits.
+analysis using plain text extracted from each article page (see --gemini-no-fetch-article to use RSS
+only). Requests run in small batches with pauses and retries for free-tier limits.
 
 Usage:
   pip install -r requirements-security-news.txt
@@ -91,6 +92,15 @@ class NewsItem:
 
 
 _TAG_RE = re.compile(r"<[^>]+>")
+
+_DEFAULT_UA = (
+    "Mozilla/5.0 (compatible; reports-fetch_security_news/1.0; "
+    "+https://github.com/) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+_ARTICLE_PAGE_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
+)
 
 
 def strip_html(text: str, max_len: int) -> str:
@@ -380,26 +390,78 @@ def _apply_gemini_rows(
         )
 
 
-def _gemini_payload_for_indices(
+def _truncate_for_gemini(text: str, max_chars: int) -> str:
+    t = (text or "").strip()
+    if len(t) > max_chars:
+        return t[: max_chars - 1].rsplit(" ", 1)[0] + "…"
+    return t
+
+
+def _fetch_article_bodies_for_chunk(
     out: list[NewsItem],
     indices: list[int],
+    *,
+    timeout: int,
+    max_bytes: int,
+    max_chars: int,
+    pause_s: float,
+    user_agent: str,
+    accept_language: str,
+) -> dict[int, str]:
+    from article_fetch import fetch_article_plain_text
+
+    bodies: dict[int, str] = {}
+    for ii, i in enumerate(indices):
+        if pause_s > 0 and ii > 0:
+            time.sleep(pause_s)
+        it = out[i]
+        try:
+            text = fetch_article_plain_text(
+                it.link,
+                timeout=timeout,
+                max_bytes=max_bytes,
+                max_chars=max_chars,
+                user_agent=user_agent,
+                accept_language=accept_language,
+            )
+            if len(text.strip()) < 60:
+                raise RuntimeError("extracted article text too short")
+        except Exception as exc:  # noqa: BLE001 — best-effort fallback per URL
+            print(
+                f"Warning: article fetch/extract failed [{it.source_name}] {it.link}: {exc}",
+                file=sys.stderr,
+            )
+            bodies[i] = (it.summary or "").strip() or "(No usable text.)"
+        else:
+            bodies[i] = text
+    return bodies
+
+
+def _gemini_payload_rows(
+    out: list[NewsItem],
+    indices: list[int],
+    bodies: dict[int, str],
+    *,
+    full_article: bool,
+    max_article_chars: int,
     max_excerpt_chars: int,
 ) -> list[dict]:
+    cap = max_article_chars if full_article else max_excerpt_chars
     payload: list[dict] = []
     for i in indices:
         it = out[i]
-        excerpt = it.summary
-        if len(excerpt) > max_excerpt_chars:
-            excerpt = excerpt[: max_excerpt_chars - 1].rsplit(" ", 1)[0] + "…"
-        payload.append(
-            {
-                "index": i,
-                "link": it.link,
-                "source": it.source_name,
-                "title": it.topic,
-                "rss_excerpt": excerpt,
-            }
-        )
+        body = _truncate_for_gemini(bodies.get(i, it.summary), cap)
+        row: dict = {
+            "index": i,
+            "link": it.link,
+            "source": it.source_name,
+            "title": it.topic,
+        }
+        if full_article:
+            row["article_plain_text"] = body
+        else:
+            row["rss_excerpt"] = body
+        payload.append(row)
     return payload
 
 
@@ -409,7 +471,14 @@ def gemini_batch_enrich(
     api_key: str,
     model: str,
     model_fallback: str | None = None,
-    max_excerpt_chars: int,
+    full_article: bool = True,
+    article_fetch_timeout_s: int = 30,
+    article_max_bytes: int = 2_500_000,
+    article_fetch_pause_s: float = 0.35,
+    article_user_agent: str = _ARTICLE_PAGE_UA,
+    article_accept_language: str = "en-US,en;q=0.9",
+    max_article_chars: int = 16_000,
+    max_excerpt_chars: int = 480,
     max_output_tokens: int,
     request_timeout_s: int,
     chunk_size: int,
@@ -435,17 +504,32 @@ def gemini_batch_enrich(
     if chunk_size <= 0 or chunk_size > n:
         chunk_size = n
 
-    instructions = (
-        "You are a careful cybersecurity editor. You receive ONLY short RSS excerpts and metadata — "
-        "not full articles. Do not invent incidents, victims, or CVEs that are not clearly supported by the excerpt. "
-        "If the excerpt is thin, say what is known and what would require reading the source.\n\n"
-        "Return ONLY a JSON array (no markdown fences). Each element must be an object with keys exactly: "
-        '"index" (integer, matching input), "link" (string, same as input), '
-        '"summary" (string, 2–4 sentences, plain English), '
-        '"analysis" (string, 2–4 sentences: implications for defenders, patch/hunt/priority angle).\n\n'
-        "The array MUST have the same length as the input list and use the same index values.\n\n"
-        "INPUT_ARTICLES_JSON:\n"
-    )
+    if full_article:
+        instructions = (
+            "You are a careful cybersecurity editor. Each input item includes metadata plus "
+            "`article_plain_text`: plain text extracted from the article HTML (navigation and ads "
+            "are mostly removed; the extract may be partial). Base summary and analysis primarily "
+            "on that text and the title. Do not invent incidents, victims, or CVEs not grounded in "
+            "the text. If the body is thin, truncated, or unclear, say what is supported and note uncertainty.\n\n"
+            "Return ONLY a JSON array (no markdown fences). Each element must be an object with keys exactly: "
+            '"index" (integer, matching input), "link" (string, same as input), '
+            '"summary" (string, 2–4 sentences, plain English), '
+            '"analysis" (string, 2–4 sentences: implications for defenders, patch/hunt/priority angle).\n\n'
+            "The array MUST have the same length as the input list and use the same index values.\n\n"
+            "INPUT_ARTICLES_JSON:\n"
+        )
+    else:
+        instructions = (
+            "You are a careful cybersecurity editor. You receive ONLY short RSS excerpts and metadata — "
+            "not full articles. Do not invent incidents, victims, or CVEs that are not clearly supported by the excerpt. "
+            "If the excerpt is thin, say what is known and what would require reading the source.\n\n"
+            "Return ONLY a JSON array (no markdown fences). Each element must be an object with keys exactly: "
+            '"index" (integer, matching input), "link" (string, same as input), '
+            '"summary" (string, 2–4 sentences, plain English), '
+            '"analysis" (string, 2–4 sentences: implications for defenders, patch/hunt/priority angle).\n\n'
+            "The array MUST have the same length as the input list and use the same index values.\n\n"
+            "INPUT_ARTICLES_JSON:\n"
+        )
 
     client = genai.Client(api_key=api_key)
     out = list(items)
@@ -455,7 +539,27 @@ def gemini_batch_enrich(
     for start in range(0, n, chunk_size):
         end = min(start + chunk_size, n)
         indices = list(range(start, end))
-        payload = _gemini_payload_for_indices(out, indices, max_excerpt_chars)
+        if full_article:
+            bodies = _fetch_article_bodies_for_chunk(
+                out,
+                indices,
+                timeout=article_fetch_timeout_s,
+                max_bytes=article_max_bytes,
+                max_chars=max_article_chars,
+                pause_s=article_fetch_pause_s,
+                user_agent=article_user_agent,
+                accept_language=article_accept_language,
+            )
+        else:
+            bodies = {i: out[i].summary for i in indices}
+        payload = _gemini_payload_rows(
+            out,
+            indices,
+            bodies,
+            full_article=full_article,
+            max_article_chars=max_article_chars,
+            max_excerpt_chars=max_excerpt_chars,
+        )
         prompt = instructions + json.dumps(payload, ensure_ascii=False)
 
         chunk_ok = False
@@ -463,7 +567,11 @@ def gemini_batch_enrich(
 
         for mi, active_model in enumerate(model_candidates):
             for attempt in range(max_retries):
-                tokens_this_chunk = min(max_output_tokens, max(2048, 450 * len(indices)))
+                approx_in = sum(len(bodies.get(i, "")) for i in indices)
+                tokens_this_chunk = min(
+                    max_output_tokens,
+                    max(2048, 450 * len(indices) + approx_in // 5),
+                )
                 try:
                     resp = client.models.generate_content(
                         model=active_model,
@@ -540,12 +648,6 @@ def gemini_batch_enrich(
             time.sleep(chunk_pause_s)
 
     return out, used_fallback
-
-
-_DEFAULT_UA = (
-    "Mozilla/5.0 (compatible; reports-fetch_security_news/1.0; "
-    "+https://github.com/) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-)
 
 
 def fetch_feed_bytes(url: str, timeout: int) -> bytes:
@@ -680,6 +782,7 @@ def build_html(
     generated_at: datetime | None = None,
     server_days: int | None = None,
     gemini_model: str | None = None,
+    gemini_article_pages: bool = False,
     read_news_summary_model: str = READ_NEWS_SUMMARY_MODEL_DEFAULT,
     read_news_tts_model: str = READ_NEWS_TTS_MODEL_DEFAULT,
     read_news_voice: str = READ_NEWS_VOICE_DEFAULT,
@@ -694,10 +797,16 @@ def build_html(
         else "No server date window; use the control below to hide older cards in the browser."
     )
     if gemini_model:
-        gemini_note = (
-            f"Summaries and analysis were generated by Google Gemini ({gemini_model}) in one batched request "
-            f"from RSS excerpts only; verify critical facts against the original article."
-        )
+        if gemini_article_pages:
+            gemini_note = (
+                f"Summaries and analysis were generated by Google Gemini ({gemini_model}) from plain text "
+                f"extracted from each article page (not only RSS snippets); verify critical facts against the source."
+            )
+        else:
+            gemini_note = (
+                f"Summaries and analysis were generated by Google Gemini ({gemini_model}) from RSS excerpts only; "
+                f"verify critical facts against the original article."
+            )
     else:
         gemini_note = "Summaries are from RSS feeds; analysis uses local keyword heuristics (no LLM)."
     reader_frag = (
@@ -947,7 +1056,37 @@ def main() -> int:
         "--gemini-max-excerpt-chars",
         type=int,
         default=480,
-        help="Max RSS excerpt chars per article sent to Gemini (smaller = fewer input tokens).",
+        help="With --gemini-no-fetch-article: max RSS excerpt chars per item sent to Gemini.",
+    )
+    parser.add_argument(
+        "--gemini-no-fetch-article",
+        action="store_true",
+        help="Do not download article pages; use RSS excerpts only for Gemini (legacy, fewer HTTP requests).",
+    )
+    parser.add_argument(
+        "--gemini-article-timeout",
+        type=int,
+        default=30,
+        help="HTTP timeout (seconds) for each article page fetch when building Gemini input.",
+    )
+    parser.add_argument(
+        "--gemini-article-max-bytes",
+        type=int,
+        default=2_500_000,
+        metavar="N",
+        help="Max raw HTML bytes to download per article (memory cap).",
+    )
+    parser.add_argument(
+        "--gemini-article-fetch-pause",
+        type=float,
+        default=0.35,
+        help="Seconds to sleep between article page fetches (politeness to publishers).",
+    )
+    parser.add_argument(
+        "--gemini-max-article-chars",
+        type=int,
+        default=16_000,
+        help="Max plain-text chars per article (after HTML extract) sent to Gemini.",
     )
     parser.add_argument(
         "--gemini-max-output-tokens",
@@ -1051,11 +1190,22 @@ def main() -> int:
             )
             return 2
         try:
+            if not args.gemini_no_fetch_article:
+                print(
+                    "Gemini: fetching each article page and extracting text for summarization "
+                    "(use --gemini-no-fetch-article to use RSS excerpts only).",
+                    file=sys.stderr,
+                )
             items, gemini_used_fallback = gemini_batch_enrich(
                 items,
                 api_key=key,
                 model=args.gemini_model,
                 model_fallback=args.gemini_model_fallback,
+                full_article=not args.gemini_no_fetch_article,
+                article_fetch_timeout_s=args.gemini_article_timeout,
+                article_max_bytes=args.gemini_article_max_bytes,
+                article_fetch_pause_s=args.gemini_article_fetch_pause,
+                max_article_chars=args.gemini_max_article_chars,
                 max_excerpt_chars=args.gemini_max_excerpt_chars,
                 max_output_tokens=args.gemini_max_output_tokens,
                 request_timeout_s=args.gemini_timeout,
@@ -1081,6 +1231,7 @@ def main() -> int:
                 items,
                 server_days=server_days,
                 gemini_model=gemini_model_used,
+                gemini_article_pages=bool(gemini_model_used) and not args.gemini_no_fetch_article,
                 read_news_summary_model=args.read_news_summary_model,
                 read_news_tts_model=args.read_news_tts_model,
                 read_news_voice=args.read_news_voice,
