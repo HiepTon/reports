@@ -39,11 +39,12 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 from digest_reader_embed import (
+    READ_NEWS_CLOUD_TTS_VOICE_EN_DEFAULT,
+    READ_NEWS_CLOUD_TTS_VOICE_FALLBACK_EN_DEFAULT,
+    READ_NEWS_CLOUD_TTS_VOICE_FALLBACK_VI_DEFAULT,
+    READ_NEWS_CLOUD_TTS_VOICE_VI_DEFAULT,
     READ_NEWS_SUMMARY_FALLBACK_MODEL_DEFAULT,
     READ_NEWS_SUMMARY_MODEL_DEFAULT,
-    READ_NEWS_TTS_FALLBACK_MODEL_DEFAULT,
-    READ_NEWS_TTS_MODEL_DEFAULT,
-    READ_NEWS_VOICE_DEFAULT,
     digest_reader_css,
     digest_reader_script,
     digest_reader_toolbar_inner,
@@ -784,10 +785,9 @@ def build_html(
     gemini_model: str | None = None,
     gemini_article_pages: bool = False,
     read_news_summary_model: str = READ_NEWS_SUMMARY_MODEL_DEFAULT,
-    read_news_tts_model: str = READ_NEWS_TTS_MODEL_DEFAULT,
-    read_news_voice: str = READ_NEWS_VOICE_DEFAULT,
+    read_news_cloud_tts_voice: str = READ_NEWS_CLOUD_TTS_VOICE_EN_DEFAULT,
     read_news_summary_model_fallback: str | None = None,
-    read_news_tts_model_fallback: str | None = None,
+    read_news_cloud_tts_voice_fallback: str | None = None,
 ) -> str:
     when = (generated_at or datetime.now(timezone.utc)).strftime("%Y-%m-%d %H:%M UTC")
     day_default = str(server_days if server_days is not None else 14)
@@ -809,14 +809,19 @@ def build_html(
             )
     else:
         gemini_note = "Summaries are from RSS feeds; analysis uses local keyword heuristics (no LLM)."
+    tts_fallback = (
+        read_news_cloud_tts_voice_fallback
+        if read_news_cloud_tts_voice_fallback is not None
+        else READ_NEWS_CLOUD_TTS_VOICE_FALLBACK_EN_DEFAULT
+    )
     reader_frag = (
         " Read news: "
         + html_module.escape(read_news_summary_model)
-        + " prepares lines, "
-        + html_module.escape(read_news_tts_model)
-        + " synthesizes audio (voice "
-        + html_module.escape(read_news_voice)
-        + "); API key prompt, sessionStorage only."
+        + " prepares lines, Google Cloud Text-to-Speech synthesizes audio (voices "
+        + html_module.escape(read_news_cloud_tts_voice)
+        + " / fallback "
+        + html_module.escape(tts_fallback)
+        + "); Gemini + Cloud keys in-toolbar, sessionStorage only."
     )
     cards: list[str] = []
     for it in items:
@@ -990,10 +995,9 @@ def build_html(
 {digest_reader_script(
         lang="en",
         summary_model=read_news_summary_model,
-        tts_model=read_news_tts_model,
-        voice=read_news_voice,
+        cloud_tts_voice=read_news_cloud_tts_voice,
         summary_model_fallback=read_news_summary_model_fallback,
-        tts_model_fallback=read_news_tts_model_fallback,
+        cloud_tts_voice_fallback=read_news_cloud_tts_voice_fallback,
     )}
   </script>
 </body>
@@ -1126,16 +1130,10 @@ def main() -> int:
         help="Model for turning visible cards into read-aloud lines (JSON).",
     )
     parser.add_argument(
-        "--read-news-tts-model",
-        default=READ_NEWS_TTS_MODEL_DEFAULT,
-        metavar="MODEL_ID",
-        help="Gemini TTS model for speech audio (generateContent + AUDIO).",
-    )
-    parser.add_argument(
-        "--read-news-voice",
-        default=READ_NEWS_VOICE_DEFAULT,
-        metavar="NAME",
-        help="Prebuilt Gemini TTS voice (e.g. Enceladus, Kore).",
+        "--read-news-cloud-voice",
+        default=READ_NEWS_CLOUD_TTS_VOICE_EN_DEFAULT,
+        metavar="VOICE_ID",
+        help="Google Cloud Text-to-Speech voice id (e.g. en-US-Neural2-J).",
     )
     parser.add_argument(
         "--read-news-summary-fallback-model",
@@ -1144,10 +1142,10 @@ def main() -> int:
         help="Browser read-aloud: fallback if summary prep fails on the primary model.",
     )
     parser.add_argument(
-        "--read-news-tts-fallback-model",
-        default=READ_NEWS_TTS_FALLBACK_MODEL_DEFAULT,
-        metavar="MODEL_ID",
-        help="Browser read-aloud: fallback TTS model if the primary fails.",
+        "--read-news-cloud-voice-fallback",
+        default=READ_NEWS_CLOUD_TTS_VOICE_FALLBACK_EN_DEFAULT,
+        metavar="VOICE_ID",
+        help="Browser read-aloud: fallback Cloud TTS voice id if primary fails.",
     )
     args = parser.parse_args()
 
@@ -1233,10 +1231,9 @@ def main() -> int:
                 gemini_model=gemini_model_used,
                 gemini_article_pages=bool(gemini_model_used) and not args.gemini_no_fetch_article,
                 read_news_summary_model=args.read_news_summary_model,
-                read_news_tts_model=args.read_news_tts_model,
-                read_news_voice=args.read_news_voice,
+                read_news_cloud_tts_voice=args.read_news_cloud_voice,
                 read_news_summary_model_fallback=args.read_news_summary_fallback_model,
-                read_news_tts_model_fallback=args.read_news_tts_fallback_model,
+                read_news_cloud_tts_voice_fallback=args.read_news_cloud_voice_fallback,
             ),
             encoding="utf-8",
         )

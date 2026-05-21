@@ -75,6 +75,21 @@ If Gemini errors or returns unusable JSON, the script **falls back** to RSS + he
 
 **GitHub Actions:** add a repository secret **`GEMINI_API_KEY`**. The scheduled workflow passes **`--gemini` automatically when the secret is set**; if unset, the build uses RSS + heuristics only (no failure).
 
+### Browser Read aloud (`output/*.html`)
+
+The standalone HTML builds add **Read news** / **Đọc tin** in the toolbar:
+
+| Step | Key | Backend |
+|------|-----|---------|
+| Short spoken lines per card | Gemini API ([Google AI Studio](https://aistudio.google.com/apikey)) | `generateContent` |
+| Text-to-speech audio | Separate **Google Cloud API key** ([Text-to-Speech API](https://cloud.google.com/text-to-speech) enabled on a GCP project) | `POST …/text:synthesize` |
+
+A **Gemini-only** AI Studio key usually **cannot** call Cloud Text-to-Speech—you need **[API Credentials](https://console.cloud.google.com/apis/credentials)** on a project where **Cloud Text-to-Speech API** is turned on.
+
+Both keys are entered in-page and saved in **`sessionStorage`** for that tab. URL overrides include **`readerVoice`** / **`readerVoiceFallback`** (Cloud [voice IDs](https://cloud.google.com/text-to-speech/docs/voices)); **`summaryModel`** / **`summaryFallbackModel`** (Gemini model ids).
+
+Build-time flags (`fetch_security_news.py`, `fetch_vietnam_news.py`): **`--read-news-cloud-voice`**, **`--read-news-cloud-voice-fallback`**, **`--read-news-summary-model`**, **`--read-news-summary-fallback-model`**.
+
 ### Adding or changing feeds
 
 1. Open [`config/security_news_feeds.json`](config/security_news_feeds.json).
@@ -150,17 +165,7 @@ git remote add origin https://github.com/YOUR_USER/reports.git
 git push -u origin main
 ```
 
-Create the empty repository first in the GitHub UI (**New repository**), then run the commands above. Do not commit API keys; use **GitHub Actions secrets** (e.g. `GEMINI_API_KEY`) for Gemini.
-
-Repository secrets (usual case)
-  Open the repo on GitHub.
-  Go to Settings (repo tabs).
-  In the left sidebar: Secrets and variables → Actions.
-  Open the Secrets tab (not “Variables” unless you want non-secret config).
-  Click New repository secret.
-  Name: use LIKE_THIS (e.g. GEMINI_API_KEY, HF_TOKEN). Convention: uppercase with underscores.
-  Secret: paste the value once; you cannot view it again after saving (only update or delete).
-  Save.
+Create the empty repository first in the GitHub UI (**New repository**), then run the commands above. Do not commit API keys; use **GitHub Actions secrets** (e.g. `GEMINI_API_KEY`) for Gemini. See GitHub docs: **[Using secrets in Actions](https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions)**.
 
 ## GitHub Pages (public URL)
 
