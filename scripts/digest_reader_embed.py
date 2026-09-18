@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 # Text prep for read-aloud (batched JSON array of strings); must support generateContent
-READ_NEWS_SUMMARY_MODEL_DEFAULT = "gemini-3.1-flash-lite"
-READ_NEWS_SUMMARY_FALLBACK_MODEL_DEFAULT = "gemini-2.5-flash-lite"
+READ_NEWS_SUMMARY_MODEL_DEFAULT = "gemini-2.5-flash-lite"
+READ_NEWS_SUMMARY_FALLBACK_MODEL_DEFAULT = "gemini-2.0-flash"
 # Audio synthesis via Cloud Text-to-Speech (voice name = GCP voice ID, see Cloud TTS voice list).
 READ_NEWS_CLOUD_TTS_VOICE_EN_DEFAULT = "en-US-Neural2-J"
 READ_NEWS_CLOUD_TTS_VOICE_VI_DEFAULT = "vi-VN-Neural2-D"

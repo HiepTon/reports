@@ -49,6 +49,13 @@ from digest_reader_embed import (
     digest_reader_script,
     digest_reader_toolbar_inner,
 )
+from news_filters import (
+    effective_cap,
+    is_excluded,
+    load_config_exclude_keywords,
+    parse_cli_keywords,
+    parse_max_items,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_FEEDS_PATH = _REPO_ROOT / "config" / "security_news_feeds.json"
@@ -58,15 +65,15 @@ def default_feeds_config_path() -> Path:
     return _DEFAULT_FEEDS_PATH
 
 
-def load_feeds(path: Path) -> dict[str, tuple[str, str]]:
-    """Load feed id -> (display title, rss_or_atom_url) from JSON config."""
+def load_feeds(path: Path) -> dict[str, tuple[str, str, int | None]]:
+    """Load feed id -> (display title, rss_or_atom_url, per-feed max_items) from JSON config."""
     if not path.is_file():
         raise FileNotFoundError(f"Feeds config not found: {path}")
     data = json.loads(path.read_text(encoding="utf-8"))
     raw = data.get("feeds")
     if not isinstance(raw, dict) or not raw:
         raise ValueError(f"Config {path} must contain a non-empty 'feeds' object.")
-    out: dict[str, tuple[str, str]] = {}
+    out: dict[str, tuple[str, str, int | None]] = {}
     for feed_id, meta in raw.items():
         key = str(feed_id).strip().lower()
         if not key:
@@ -77,7 +84,7 @@ def load_feeds(path: Path) -> dict[str, tuple[str, str]]:
         url = (meta.get("feed_url") or meta.get("url") or "").strip()
         if not title or not url:
             raise ValueError(f"Feed '{key}': requires non-empty 'title' and 'feed_url'.")
-        out[key] = (title, url)
+        out[key] = (title, url, parse_max_items(meta))
     return out
 
 
@@ -723,27 +730,35 @@ def sort_key(item: NewsItem) -> tuple[float, str]:
 
 
 def gather(
-    feeds: dict[str, tuple[str, str]],
+    feeds: dict[str, tuple[str, str, int | None]],
     source_ids: list[str],
     per_source: int,
     timeout: int,
     pause_s: float,
+    exclude_keywords: list[str] | None = None,
 ) -> list[NewsItem]:
     collected: list[NewsItem] = []
     errors: list[str] = []
+    keywords = exclude_keywords or []
+    excluded_count = 0
 
     for i, sid in enumerate(source_ids):
         if sid not in feeds:
             errors.append(f"Unknown source id: {sid}")
             continue
-        name, url = feeds[sid]
+        name, url, feed_max = feeds[sid]
         try:
-            batch = parse_feed(sid, name, url, timeout)[:per_source]
-            collected.extend(batch)
+            parsed = parse_feed(sid, name, url, timeout)
+            kept = [it for it in parsed if not is_excluded(f"{it.topic} {it.summary}", keywords)]
+            excluded_count += len(parsed) - len(kept)
+            collected.extend(kept[: effective_cap(feed_max, per_source)])
         except Exception as exc:  # noqa: BLE001 — surface per-feed failures
             errors.append(f"{name}: {exc}")
         if pause_s > 0 and i < len(source_ids) - 1:
             time.sleep(pause_s)
+
+    if excluded_count:
+        print(f"Exclude keywords: dropped {excluded_count} item(s) matching {keywords}.", file=sys.stderr)
 
     if errors:
         print("Warnings:", file=sys.stderr)
@@ -1021,8 +1036,20 @@ def main() -> int:
         default="all",
         help="Comma-separated feed ids from your config, or 'all' (default).",
     )
-    parser.add_argument("--per-source", type=int, default=8, help="Max items to read from each feed (default 8).")
+    parser.add_argument(
+        "--per-source",
+        type=int,
+        default=8,
+        help="Max items to read from each feed (default 8). A feed's 'max_items' in the config overrides this.",
+    )
     parser.add_argument("--limit", type=int, default=15, help="Max items after merge, sort, dedupe (default 15).")
+    parser.add_argument(
+        "--exclude-keywords",
+        default=None,
+        metavar="K1,K2,...",
+        help="Comma-separated keywords; drop items whose title or summary contains any (case-insensitive). "
+        "Merged with the config's top-level 'exclude_keywords' list.",
+    )
     parser.add_argument("--timeout", type=int, default=25, help="HTTP timeout seconds per feed fetch (default 25).")
     parser.add_argument("--pause", type=float, default=0.0, help="Seconds to sleep between feed fetches (politeness).")
     parser.add_argument("--json", action="store_true", help="Print JSON array to stdout.")
@@ -1046,15 +1073,15 @@ def main() -> int:
     )
     parser.add_argument(
         "--gemini-model",
-        default="gemini-3.1-flash-lite",
-        help="Model id for generateContent (default: Gemini 3.1 Flash Lite). "
+        default="gemini-2.5-flash-lite",
+        help="Model id for generateContent (default: Gemini 2.5 Flash Lite, free tier). "
         "Live-only ids (e.g. gemini-3.1-flash-live-preview) are not supported here—use AI Studio ListModels.",
     )
     parser.add_argument(
         "--gemini-model-fallback",
         default=READ_NEWS_SUMMARY_FALLBACK_MODEL_DEFAULT,
         metavar="MODEL_ID",
-        help="If the primary model fails after retries, retry each chunk with this model (default: Gemini 2.5 Flash Lite).",
+        help="If the primary model fails after retries, retry each chunk with this model (default: Gemini 2.0 Flash).",
     )
     parser.add_argument(
         "--gemini-max-excerpt-chars",
@@ -1165,7 +1192,15 @@ def main() -> int:
     else:
         sids = [s.strip().lower() for s in args.sources.split(",") if s.strip()]
 
-    items = gather(feeds, sids, per_source=args.per_source, timeout=args.timeout, pause_s=args.pause)
+    exclude_keywords = load_config_exclude_keywords(feeds_path) + parse_cli_keywords(args.exclude_keywords)
+    items = gather(
+        feeds,
+        sids,
+        per_source=args.per_source,
+        timeout=args.timeout,
+        pause_s=args.pause,
+        exclude_keywords=exclude_keywords,
+    )
     server_days: int | None = None
     if args.days is not None:
         server_days = args.days

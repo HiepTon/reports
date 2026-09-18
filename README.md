@@ -107,6 +107,27 @@ Example:
 3. Run locally to verify the feed parses (`python scripts/fetch_security_news.py --sources nakedsecurity --limit 3`).
 4. Commit the JSON change and push; the next scheduled or manual workflow run will pick it up.
 
+**Per-feed item count.** Add an optional `"max_items"` to any feed to cap how many of its items are read, overriding the global `--per-source` for that feed only:
+
+```json
+"nakedsecurity": {
+  "title": "Naked Security (Sophos)",
+  "feed_url": "https://nakedsecurity.sophos.com/feed/",
+  "max_items": 3
+}
+```
+
+**Excluding items by keyword.** Set a top-level `"exclude_keywords"` list in the config; any item whose **title or summary** contains one of the words (case-insensitive substring) is dropped before the per-feed cap is applied:
+
+```json
+{
+  "exclude_keywords": ["sponsored", "webinar", "giveaway"],
+  "feeds": { "…": {} }
+}
+```
+
+You can also pass keywords per run with `--exclude-keywords sponsored,webinar` (comma-separated); CLI keywords are **merged with** the config list. Both scripts (`fetch_security_news.py`, `fetch_vietnam_news.py`) support `max_items` and `exclude_keywords`.
+
 Many sites expose `/feed/`, `/rss`, or FeedBurner URLs. Prefer **official RSS/Atom** links; scraping HTML is out of scope for this script.
 
 **SC Media / SC World:** scripted access to scworld.com is often blocked or not real RSS. If you get a stable feed URL, add it to the JSON like any other source.

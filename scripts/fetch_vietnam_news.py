@@ -44,6 +44,13 @@ from digest_reader_embed import (
     digest_reader_script,
     digest_reader_toolbar_inner,
 )
+from news_filters import (
+    effective_cap,
+    is_excluded,
+    load_config_exclude_keywords,
+    parse_cli_keywords,
+    parse_max_items,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_FEEDS_PATH = _REPO_ROOT / "config" / "vietnam_news_feeds.json"
@@ -91,15 +98,15 @@ def default_feeds_config_path() -> Path:
     return _DEFAULT_FEEDS_PATH
 
 
-def load_feeds(path: Path) -> dict[str, tuple[str, str, list[str]]]:
-    """Returns feed_id -> (title, primary_feed_url, extra_fallback_urls)."""
+def load_feeds(path: Path) -> dict[str, tuple[str, str, list[str], int | None]]:
+    """Returns feed_id -> (title, primary_feed_url, extra_fallback_urls, per-feed max_items)."""
     if not path.is_file():
         raise FileNotFoundError(f"Feeds config not found: {path}")
     data = json.loads(path.read_text(encoding="utf-8"))
     raw = data.get("feeds")
     if not isinstance(raw, dict) or not raw:
         raise ValueError(f"Config {path} must contain a non-empty 'feeds' object.")
-    out: dict[str, tuple[str, str, list[str]]] = {}
+    out: dict[str, tuple[str, str, list[str], int | None]] = {}
     for feed_id, meta in raw.items():
         key = str(feed_id).strip().lower()
         if not key:
@@ -114,7 +121,7 @@ def load_feeds(path: Path) -> dict[str, tuple[str, str, list[str]]]:
         fallbacks: list[str] = []
         if isinstance(fb_raw, list):
             fallbacks = [str(u).strip() for u in fb_raw if str(u).strip()]
-        out[key] = (title, url, fallbacks)
+        out[key] = (title, url, fallbacks, parse_max_items(meta))
     return out
 
 
@@ -376,29 +383,37 @@ def prioritize_tuoitre_top(items: list[VietnamNewsItem]) -> list[VietnamNewsItem
 
 
 def gather(
-    feeds: dict[str, tuple[str, str, list[str]]],
+    feeds: dict[str, tuple[str, str, list[str], int | None]],
     source_ids: list[str],
     per_source: int,
     timeout: int,
     pause_s: float,
+    exclude_keywords: list[str] | None = None,
 ) -> list[VietnamNewsItem]:
     source_ids = reorder_sources_for_priority(source_ids)
     collected: list[VietnamNewsItem] = []
     errors: list[str] = []
+    keywords = exclude_keywords or []
+    excluded_count = 0
 
     for i, sid in enumerate(source_ids):
         if sid not in feeds:
             errors.append(f"Unknown source id: {sid}")
             continue
-        name, url, fallbacks = feeds[sid]
+        name, url, fallbacks, feed_max = feeds[sid]
         try:
             urls = [url] + list(fallbacks)
-            batch = parse_feed_try_urls(sid, name, urls, timeout)[:per_source]
-            collected.extend(batch)
+            parsed = parse_feed_try_urls(sid, name, urls, timeout)
+            kept = [it for it in parsed if not is_excluded(f"{it.topic} {it.summary}", keywords)]
+            excluded_count += len(parsed) - len(kept)
+            collected.extend(kept[: effective_cap(feed_max, per_source)])
         except Exception as exc:  # noqa: BLE001
             errors.append(f"{name}: {exc}")
         if pause_s > 0 and i < len(source_ids) - 1:
             time.sleep(pause_s)
+
+    if excluded_count:
+        print(f"Exclude keywords: dropped {excluded_count} item(s) matching {keywords}.", file=sys.stderr)
 
     if errors:
         print("Warnings:", file=sys.stderr)
@@ -1053,15 +1068,22 @@ def main() -> int:
     )
     parser.add_argument("--feeds-config", type=Path, default=None, help="JSON feeds (default: config/vietnam_news_feeds.json).")
     parser.add_argument("--sources", default="all", help="Danh sách id nguồn (phẩy) hoặc all.")
-    parser.add_argument("--per-source", type=int, default=12)
+    parser.add_argument("--per-source", type=int, default=12, help="Số bài tối đa mỗi nguồn; 'max_items' trong config sẽ ghi đè.")
     parser.add_argument("--limit", type=int, default=20)
+    parser.add_argument(
+        "--exclude-keywords",
+        default=None,
+        metavar="K1,K2,...",
+        help="Từ khóa (phẩy) để loại bài có tiêu đề/tóm tắt chứa từ đó (không phân biệt hoa thường); "
+        "gộp với 'exclude_keywords' trong config.",
+    )
     parser.add_argument("--timeout", type=int, default=25)
     parser.add_argument("--pause", type=float, default=0.25)
     parser.add_argument("--days", type=int, default=None, metavar="N")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--html", metavar="PATH")
     parser.add_argument("--gemini", action="store_true")
-    parser.add_argument("--gemini-model", default="gemini-3.1-flash-lite")
+    parser.add_argument("--gemini-model", default="gemini-2.5-flash-lite")
     parser.add_argument(
         "--gemini-model-fallback",
         default=READ_NEWS_SUMMARY_FALLBACK_MODEL_DEFAULT,
@@ -1124,7 +1146,8 @@ def main() -> int:
         s.strip().lower() for s in args.sources.split(",") if s.strip()
     ]
 
-    items = gather(feeds, sids, args.per_source, args.timeout, args.pause)
+    exclude_keywords = load_config_exclude_keywords(feeds_path) + parse_cli_keywords(args.exclude_keywords)
+    items = gather(feeds, sids, args.per_source, args.timeout, args.pause, exclude_keywords=exclude_keywords)
     server_days: int | None = None
     if args.days is not None:
         server_days = args.days
