@@ -40,15 +40,15 @@ jobs:
 
       - name: Build Vietnam digest (for /vietnam/)
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
           set -e
-          GEMINI_FLAG=""
-          if [ -n "${GEMINI_API_KEY:-}" ]; then
-            GEMINI_FLAG="--gemini"
-            echo "GEMINI_API_KEY set: enabling Gemini (Vietnamese summary + category)."
+          SUMMARIZE_FLAG=""
+          if [ -n "${GROQ_API_KEY:-}" ]; then
+            SUMMARIZE_FLAG="--summarize"
+            echo "GROQ_API_KEY set: enabling Groq (Vietnamese summary + category)."
           else
-            echo "GEMINI_API_KEY not set: RSS excerpts only, category 'Chưa phân loại'."
+            echo "GROQ_API_KEY not set: RSS excerpts only, category 'Chưa phân loại'."
           fi
           python scripts/fetch_vietnam_news.py \
             --days 1 \
@@ -56,19 +56,19 @@ jobs:
             --limit 90 \
             --pause 0.3 \
             --html output/vietnam/index.html \
-            $GEMINI_FLAG
+            $SUMMARIZE_FLAG
 
       - name: Build security digest (site root index for Pages)
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
           set -e
-          GEMINI_FLAG=""
-          if [ -n "${GEMINI_API_KEY:-}" ]; then
-            GEMINI_FLAG="--gemini"
-            echo "GEMINI_API_KEY set: enabling Gemini (chunked summaries)."
+          SUMMARIZE_FLAG=""
+          if [ -n "${GROQ_API_KEY:-}" ]; then
+            SUMMARIZE_FLAG="--summarize"
+            echo "GROQ_API_KEY set: enabling Groq (chunked summaries)."
           else
-            echo "GEMINI_API_KEY not set; using RSS + heuristic text only."
+            echo "GROQ_API_KEY not set; using RSS + heuristic text only."
           fi
           python scripts/fetch_security_news.py \
             --days 2 \
@@ -79,7 +79,7 @@ jobs:
             --gemini-chunk-size 5 \
             --gemini-chunk-pause 32 \
             --gemini-max-excerpt-chars 450 \
-            $GEMINI_FLAG
+            $SUMMARIZE_FLAG
 
       - name: Disable Jekyll (static HTML only)
         run: touch output/.nojekyll

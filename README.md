@@ -4,9 +4,11 @@ Workspace for security reporting utilities and generated artifacts.
 
 ## Security news digest
 
-`scripts/fetch_security_news.py` pulls recent headlines from public RSS/Atom feeds, then either keeps **RSS summaries + keyword heuristics** or, with **`--gemini`**, calls **Google Gemini in small batches** (with pauses and **429 retries**) to rewrite **summary** and **analysis**—this stays closer to **free-tier** token and request limits than one giant prompt. It always outputs the **canonical article URL**.
+`scripts/fetch_security_news.py` pulls recent headlines from public RSS/Atom feeds, then either keeps **RSS summaries + keyword heuristics** or, with **`--summarize`**, calls **Groq (an LLM) in small batches** (with pauses and **429 retries**) to rewrite **summary** and **analysis**—this stays closer to **free-tier** request limits than one giant prompt. It always outputs the **canonical article URL**.
 
 **Feed list:** edit [`config/security_news_feeds.json`](config/security_news_feeds.json) (see [Adding feeds](#adding-or-changing-feeds)). Override path with `--feeds-config`.
+
+**Ordering:** items follow the **feed sequence in the config file**, then **newest-first within each feed**. Reorder feeds in the config to change the display order; on a duplicate URL, the earlier feed keeps the article.
 
 ### Setup
 
@@ -54,39 +56,37 @@ python scripts/fetch_security_news.py --sources projectzero,cisa,krebs --limit 8
 
 Optional pause between feed requests (`--pause 0.5`) and HTTP timeout (`--timeout 30`).
 
-### Google Gemini (chunked + 429 retries)
+### LLM summaries via Groq (chunked + 429 retries)
 
-1. Create an API key in [Google AI Studio](https://aistudio.google.com/apikey).
-2. Export **`GEMINI_API_KEY`** (or **`GOOGLE_API_KEY`**).
-3. Run with **`--gemini`**.
+1. Create a free API key at [Groq Console](https://console.groq.com/keys).
+2. Export **`GROQ_API_KEY`**.
+3. Run with **`--summarize`** (the legacy alias **`--gemini`** still works).
 
 ```bash
-export GEMINI_API_KEY="your-key"
-python scripts/fetch_security_news.py --days 7 --limit 25 --gemini --html output/index.html
+export GROQ_API_KEY="your-key"
+python scripts/fetch_security_news.py --days 7 --limit 25 --summarize --html output/index.html
 ```
 
-**Free tier / 429 RESOURCE_EXHAUSTED:** the script defaults to **several small API calls** (`--gemini-chunk-size` default **6** articles) with a **pause between chunks** (`--gemini-chunk-pause`, default **28s**) and **retries** that honor Google’s “retry in Xs” hint (`--gemini-retries`, default **7**). That reduces spikes in **input tokens per minute** and **requests per minute**. You can tighten further: `--gemini-chunk-size 4 --gemini-chunk-pause 35 --gemini-max-excerpt-chars 400`.
+**Free tier / 429 rate limits:** the script defaults to **several small API calls** (`--gemini-chunk-size` default **6** articles) with a **pause between chunks** (`--gemini-chunk-pause`, default **28s**) and **retries** that honor a `Retry-After` header (`--gemini-retries`, default **7**). That reduces spikes in **requests per minute**. Tighten further with `--gemini-chunk-size 4 --gemini-chunk-pause 35 --gemini-max-excerpt-chars 400`.
 
-Default model is **`gemini-3.1-flash-lite`** (Gemini 3.1 Flash Lite), aimed at lower quota pressure than larger Flash models on **`generateContent`**. **Gemini 3.x “Flash Live”** models (for example `gemini-3.1-flash-live-preview`) are for the **Live API** (WebSocket), not `generateContent`—using them here returns **404**. Override with **`--gemini-model`** to any id your key supports (check **List models** in [Google AI Studio](https://aistudio.google.com/)).
+Default model is **`openai/gpt-oss-120b`** with fallback **`openai/gpt-oss-20b`** (both on Groq's free tier; the older Llama 3.x ids were deprecated mid-2026). Override with **`--summary-model`** / **`--summary-model-fallback`** to any Groq chat model id (`vendor/model`; see the [Groq model list](https://console.groq.com/docs/models)).
 
-Tuning flags: **`--gemini-max-excerpt-chars`** (default 480), **`--gemini-max-output-tokens`**, **`--gemini-timeout`**, **`--gemini-chunk-size`** (use **0** for a single request containing every article—higher 429 risk on free tier).
+Tuning flags (historical `--gemini-*` names, provider-agnostic): **`--gemini-max-excerpt-chars`** (default 480), **`--gemini-max-output-tokens`**, **`--gemini-timeout`**, **`--gemini-chunk-size`** (use **0** for a single request containing every article—higher rate-limit risk on the free tier).
 
-If Gemini errors or returns unusable JSON, the script **falls back** to RSS + heuristics and still writes HTML/JSON.
+If Groq errors or returns unusable JSON, the script **falls back** to RSS + heuristics and still writes HTML/JSON.
 
-**GitHub Actions:** add a repository secret **`GEMINI_API_KEY`**. The scheduled workflow passes **`--gemini` automatically when the secret is set**; if unset, the build uses RSS + heuristics only (no failure).
+**GitHub Actions:** add a repository secret **`GROQ_API_KEY`**. The scheduled workflow passes **`--summarize` automatically when the secret is set**; if unset, the build uses RSS + heuristics only (no failure).
 
 ### Browser Read aloud (`output/*.html`)
 
-The standalone HTML builds add **Read news** / **Đọc tin** in the toolbar:
+The standalone HTML builds add **Read news** / **Đọc tin** in the toolbar. The reader **speaks the summaries already baked into the page** (no in-browser LLM) and synthesizes audio with **Azure AI Speech** via its browser SDK (the CORS-safe way to call Azure TTS from a page):
 
-| Step | Key | Backend |
-|------|-----|---------|
-| Short spoken lines per card | Gemini API ([Google AI Studio](https://aistudio.google.com/apikey)) | `generateContent` |
-| Text-to-speech audio | Separate **Google Cloud API key** ([Text-to-Speech API](https://cloud.google.com/text-to-speech) enabled on a GCP project) | `POST …/text:synthesize` |
+| Step | Needs | Backend |
+|------|-------|---------|
+| Read-aloud text | Nothing — uses the on-page summaries | — |
+| Text-to-speech audio | **Azure Speech resource key + region** ([create one](https://portal.azure.com/#create/Microsoft.CognitiveServicesSpeechServices)) | Azure Speech SDK (`window.SpeechSDK`) |
 
-A **Gemini-only** AI Studio key usually **cannot** call Cloud Text-to-Speech—you need **[API Credentials](https://console.cloud.google.com/apis/credentials)** on a project where **Cloud Text-to-Speech API** is turned on.
-
-Both keys are entered in-page and saved in **`sessionStorage`** for that tab. URL overrides include **`readerVoice`** / **`readerVoiceFallback`** (Cloud [voice IDs](https://cloud.google.com/text-to-speech/docs/voices)); **`summaryModel`** / **`summaryFallbackModel`** (Gemini model ids).
+The Azure **key + region** are entered in-page once and saved in **`localStorage`** (persists across visits until the visitor edits or clears them). Azure's **F0 (free)** tier gives ~500K characters/month and needs no billing account. URL overrides: **`readerVoice`** / **`readerVoiceFallback`** ([Azure voice ids](https://learn.microsoft.com/azure/ai-services/speech-service/language-support?tabs=tts)) and **`readerRegion`**. Default voices: `en-US-AriaNeural` (security) and `vi-VN-HoaiMyNeural` (Vietnam).
 
 Build-time flags (`fetch_security_news.py`, `fetch_vietnam_news.py`): **`--read-news-cloud-voice`**, **`--read-news-cloud-voice-fallback`**, **`--read-news-summary-model`**, **`--read-news-summary-fallback-model`**.
 
@@ -134,9 +134,9 @@ Many sites expose `/feed/`, `/rss`, or FeedBurner URLs. Prefer **official RSS/At
 
 ## Vietnam news digest
 
-[`scripts/fetch_vietnam_news.py`](scripts/fetch_vietnam_news.py) aggregates **Vietnamese press RSS** feeds (see [`config/vietnam_news_feeds.json`](config/vietnam_news_feeds.json)), optionally calls **Gemini** to write a **Vietnamese summary** and assign one of a fixed set of **categories** (Thời sự, Kinh tế, Thế giới, …). Output: **HTML** and/or **JSON**; UI strings are Vietnamese.
+[`scripts/fetch_vietnam_news.py`](scripts/fetch_vietnam_news.py) aggregates **Vietnamese press RSS** feeds (see [`config/vietnam_news_feeds.json`](config/vietnam_news_feeds.json)), optionally calls **Groq (an LLM)** to write a **Vietnamese summary** and assign one of a fixed set of **categories** (Thời sự, Kinh tế, Thế giới, …). Output: **HTML** and/or **JSON**; UI strings are Vietnamese.
 
-**Source priority:** [tuổi trẻ.vn](https://tuoitre.vn/), [thanhnien.vn](https://thanhnien.vn/), and [dantri.com.vn](https://dantri.com.vn/) are **fetched first**. After merge, the digest is sorted **newest first**; when timestamps tie, order is **Tuổi Trẻ → Thanh Niên → Dân Trí → other feeds** (see `PRIORITY_SOURCE_ORDER` in `scripts/fetch_vietnam_news.py`). Those three feeds are listed first in [`config/vietnam_news_feeds.json`](config/vietnam_news_feeds.json).
+**Ordering:** the digest follows the **feed sequence in [`config/vietnam_news_feeds.json`](config/vietnam_news_feeds.json)**, then **newest-first within each feed**. Because [tuổi trẻ.vn](https://tuoitre.vn/), [thanhnien.vn](https://thanhnien.vn/), and [dantri.com.vn](https://dantri.com.vn/) are listed first in the config, they lead the digest and Tuổi Trẻ items form the highlighted **Tin nổi bật** section. Reorder feeds in the config to change the display order. On a duplicate URL, the earlier feed in the config keeps the article.
 
 ### Setup
 
@@ -148,10 +148,10 @@ pip install -r requirements-vietnam-news.txt
 
 ```bash
 python scripts/fetch_vietnam_news.py --limit 15
-GEMINI_API_KEY=... python scripts/fetch_vietnam_news.py --gemini --days 2 --html output/vietnam/index.html
+GROQ_API_KEY=... python scripts/fetch_vietnam_news.py --summarize --days 2 --html output/vietnam/index.html
 ```
 
-Without **`--gemini`**, the digest keeps the RSS blurb as summary and sets category **`Chưa phân loại`**. Gemini flags mirror the security script (`--gemini-chunk-size`, `--gemini-model`, etc.).
+Without **`--summarize`**, the digest keeps the RSS blurb as summary and sets category **`Chưa phân loại`**. Summary flags mirror the security script (`--summary-model`, `--gemini-chunk-size`, etc.).
 
 ### GitHub Actions (daily 5:00 Vietnam)
 
@@ -163,7 +163,7 @@ Workflow: [`.github/workflows/vietnam-news-daily.yml`](.github/workflows/vietnam
 
 ### Other scripts
 
-- `scripts/fetch_vietnam_news.py` — Vietnam RSS digest with optional Gemini summaries and categories ([Vietnam news digest](#vietnam-news-digest)).
+- `scripts/fetch_vietnam_news.py` — Vietnam RSS digest with optional Groq summaries and categories ([Vietnam news digest](#vietnam-news-digest)).
 - `scripts/build_insight_report_docx.py` — builds insight report documents (see script docstring and usage there).
 
 ### Notes
@@ -186,7 +186,7 @@ git remote add origin https://github.com/YOUR_USER/reports.git
 git push -u origin main
 ```
 
-Create the empty repository first in the GitHub UI (**New repository**), then run the commands above. Do not commit API keys; use **GitHub Actions secrets** (e.g. `GEMINI_API_KEY`) for Gemini. See GitHub docs: **[Using secrets in Actions](https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions)**.
+Create the empty repository first in the GitHub UI (**New repository**), then run the commands above. Do not commit API keys; use **GitHub Actions secrets** (e.g. `GROQ_API_KEY`) for Groq summaries. See GitHub docs: **[Using secrets in Actions](https://docs.github.com/en/actions/security-guides/using-secrets-in-github-actions)**.
 
 ## GitHub Pages (public URL)
 

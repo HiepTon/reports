@@ -3,9 +3,9 @@
 Fetch recent headlines from major security news RSS/Atom feeds.
 
 Produces topic (title), summary, analysis, and canonical link. By default summaries come from RSS
-and analysis from local heuristics; with --gemini and GEMINI_API_KEY, Gemini rewrites summary and
-analysis using plain text extracted from each article page (see --gemini-no-fetch-article to use RSS
-only). Requests run in small batches with pauses and retries for free-tier limits.
+and analysis from local heuristics; with --summarize and GROQ_API_KEY, Groq (an LLM) rewrites summary
+and analysis using plain text extracted from each article page (see --gemini-no-fetch-article to use
+RSS only). Requests run in small batches with pauses and retries for free-tier limits.
 
 Usage:
   pip install -r requirements-security-news.txt
@@ -15,7 +15,7 @@ Usage:
   python scripts/fetch_security_news.py --days 7 --html output/security_news.html
   python scripts/fetch_security_news.py --sources bleepingcomputer,cisa
   python scripts/fetch_security_news.py --feeds-config /path/to/feeds.json
-  GEMINI_API_KEY=... python scripts/fetch_security_news.py --gemini --html out.html
+  GROQ_API_KEY=... python scripts/fetch_security_news.py --summarize --html out.html
 """
 from __future__ import annotations
 
@@ -39,14 +39,11 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 from digest_reader_embed import (
-    READ_NEWS_CLOUD_TTS_VOICE_EN_DEFAULT,
-    READ_NEWS_CLOUD_TTS_VOICE_FALLBACK_EN_DEFAULT,
-    READ_NEWS_CLOUD_TTS_VOICE_FALLBACK_VI_DEFAULT,
-    READ_NEWS_CLOUD_TTS_VOICE_VI_DEFAULT,
-    READ_NEWS_SUMMARY_FALLBACK_MODEL_DEFAULT,
-    READ_NEWS_SUMMARY_MODEL_DEFAULT,
+    READ_NEWS_AZURE_VOICE_EN_DEFAULT,
+    READ_NEWS_AZURE_VOICE_FALLBACK_EN_DEFAULT,
     digest_reader_css,
     digest_reader_script,
+    digest_reader_sdk_script_tag,
     digest_reader_toolbar_inner,
 )
 from news_filters import (
@@ -56,6 +53,7 @@ from news_filters import (
     parse_cli_keywords,
     parse_max_items,
 )
+import groq_summary as groq
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_FEEDS_PATH = _REPO_ROOT / "config" / "security_news_feeds.json"
@@ -275,59 +273,6 @@ def strip_json_fenced_text(text: str) -> str:
     return t.strip()
 
 
-def gemini_api_key() -> str | None:
-    return (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip() or None
-
-
-_RETRY_IN_RE = re.compile(r"retry in ([\d.]+)\s*s", re.I)
-
-
-def _is_gemini_rate_limit(exc: BaseException) -> bool:
-    try:
-        from google.genai import errors as genai_errors
-
-        if isinstance(exc, genai_errors.APIError) and getattr(exc, "code", None) == 429:
-            return True
-    except ImportError:
-        pass
-    msg = str(exc).upper()
-    return "429" in msg or "RESOURCE_EXHAUSTED" in msg
-
-
-def _gemini_retry_sleep_seconds(exc: BaseException, attempt: int) -> float:
-    m = _RETRY_IN_RE.search(str(exc))
-    if m:
-        return min(max(float(m.group(1)) + 2.0, 6.0), 120.0)
-    return min(15.0 * (2**attempt), 120.0)
-
-
-def _gemini_transient_retryable(exc: BaseException) -> bool:
-    """429/quota plus typical overload / capacity messages (retry with backoff or fallback model)."""
-    if _is_gemini_rate_limit(exc):
-        return True
-    msg_l = str(exc).lower()
-    for needle in (
-        "high demand",
-        "try again later",
-        "overloaded",
-        "temporarily unavailable",
-        "service unavailable",
-    ):
-        if needle in msg_l:
-            return True
-    try:
-        from google.genai import errors as genai_errors
-
-        if isinstance(exc, genai_errors.APIError):
-            code = getattr(exc, "code", None)
-            if code in (500, 503):
-                return True
-    except ImportError:
-        pass
-    u = str(exc).upper()
-    return "UNAVAILABLE" in u
-
-
 def _gemini_model_candidates(primary: str, fallback: str | None) -> list[str]:
     p = (primary or "").strip()
     out: list[str] = []
@@ -473,7 +418,7 @@ def _gemini_payload_rows(
     return payload
 
 
-def gemini_batch_enrich(
+def groq_batch_enrich(
     items: list[NewsItem],
     *,
     api_key: str,
@@ -494,19 +439,12 @@ def gemini_batch_enrich(
     max_retries: int,
 ) -> tuple[list[NewsItem], bool]:
     """
-    Rewrite summaries/analysis via Gemini using chunked API calls and pauses to respect
-    free-tier tokens-per-minute / requests-per-minute, with retries on transient errors,
-    then optional fallback model per chunk.
+    Rewrite summaries/analysis via Groq (OpenAI-compatible chat completions) using chunked
+    requests and pauses to respect free-tier requests-per-minute, with retries on transient
+    errors (429/5xx), then an optional fallback model per chunk.
     """
     if not items:
         return items, False
-
-    try:
-        from google import genai
-        from google.genai import errors as genai_errors
-        from google.genai import types
-    except ImportError as exc:
-        raise RuntimeError("Install google-genai (see requirements-security-news.txt).") from exc
 
     n = len(items)
     if chunk_size <= 0 or chunk_size > n:
@@ -539,7 +477,6 @@ def gemini_batch_enrich(
             "INPUT_ARTICLES_JSON:\n"
         )
 
-    client = genai.Client(api_key=api_key)
     out = list(items)
     used_fallback = False
     model_candidates = _gemini_model_candidates(model, model_fallback)
@@ -581,25 +518,21 @@ def gemini_batch_enrich(
                     max(2048, 450 * len(indices) + approx_in // 5),
                 )
                 try:
-                    resp = client.models.generate_content(
+                    raw_text = groq.chat_text(
+                        token=api_key,
                         model=active_model,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(
-                            temperature=0.35,
-                            max_output_tokens=tokens_this_chunk,
-                            response_mime_type="application/json",
-                            http_options=types.HttpOptions(timeout=request_timeout_s * 1000),
-                        ),
+                        prompt=prompt,
+                        max_tokens=tokens_this_chunk,
+                        temperature=0.35,
+                        timeout_s=request_timeout_s,
                     )
-                    raw_text = (getattr(resp, "text", None) or "").strip()
                     if not raw_text:
-                        pf = getattr(resp, "prompt_feedback", None)
-                        raise RuntimeError(f"Gemini returned empty text. prompt_feedback={pf!r}")
+                        raise RuntimeError("Groq returned empty text.")
 
                     rows = _parse_gemini_json_list(raw_text)
                     if len(rows) != len(indices):
                         print(
-                            f"Warning: Gemini returned {len(rows)} rows for chunk indices {start}-{end - 1}, "
+                            f"Warning: Groq returned {len(rows)} rows for chunk indices {start}-{end - 1}, "
                             f"expected {len(indices)}; merging partial results.",
                             file=sys.stderr,
                         )
@@ -609,28 +542,16 @@ def gemini_batch_enrich(
                     if mi > 0:
                         used_fallback = True
                         print(
-                            f"Gemini chunk {start}-{end - 1}: OK using fallback model {active_model!r}.",
+                            f"Groq chunk {start}-{end - 1}: OK using fallback model {active_model!r}.",
                             file=sys.stderr,
                         )
                     break
-                except genai_errors.APIError as exc:
+                except Exception as exc:  # noqa: BLE001 — retry transient, else fall through to next model
                     last_err = exc
-                    if _gemini_transient_retryable(exc) and attempt < max_retries - 1:
-                        delay = _gemini_retry_sleep_seconds(exc, attempt)
+                    if groq.is_transient(exc) and attempt < max_retries - 1:
+                        delay = groq.retry_sleep_seconds(exc, attempt)
                         print(
-                            f"Gemini transient error on chunk {start}-{end - 1} ({exc!s}); sleeping {delay:.1f}s "
-                            f"(retry {attempt + 2}/{max_retries}, model={active_model!r}).",
-                            file=sys.stderr,
-                        )
-                        time.sleep(delay)
-                        continue
-                    break
-                except Exception as exc:
-                    last_err = exc
-                    if _gemini_transient_retryable(exc) and attempt < max_retries - 1:
-                        delay = _gemini_retry_sleep_seconds(exc, attempt)
-                        print(
-                            f"Gemini transient error on chunk {start}-{end - 1} ({exc!s}); sleeping {delay:.1f}s "
+                            f"Groq transient error on chunk {start}-{end - 1} ({exc!s}); sleeping {delay:.1f}s "
                             f"(retry {attempt + 2}/{max_retries}, model={active_model!r}).",
                             file=sys.stderr,
                         )
@@ -643,7 +564,7 @@ def gemini_batch_enrich(
 
             if mi < len(model_candidates) - 1:
                 print(
-                    f"Gemini chunk {start}-{end - 1}: model {active_model!r} failed ({last_err!s}); "
+                    f"Groq chunk {start}-{end - 1}: model {active_model!r} failed ({last_err!s}); "
                     f"retrying with {model_candidates[mi + 1]!r}.",
                     file=sys.stderr,
                 )
@@ -718,15 +639,14 @@ def parse_feed(source_id: str, source_name: str, url: str, timeout: int) -> list
     return items
 
 
-def sort_key(item: NewsItem) -> tuple[float, str]:
+def _item_timestamp(item: NewsItem) -> float:
+    """Epoch seconds for an item's published date (0.0 when missing/unparseable)."""
     if item.published:
         try:
-            ts = datetime.fromisoformat(item.published.replace("Z", "+00:00")).timestamp()
+            return datetime.fromisoformat(item.published.replace("Z", "+00:00")).timestamp()
         except ValueError:
-            ts = 0.0
-    else:
-        ts = 0.0
-    return (-ts, item.link)
+            return 0.0
+    return 0.0
 
 
 def gather(
@@ -765,10 +685,15 @@ def gather(
         for e in errors:
             print(f"  - {e}", file=sys.stderr)
 
-    # Dedupe by normalized URL, keep newest-first occurrence
+    # Order by feed sequence in the config (source_ids order), then newest-first within each feed.
+    # Dedupe by normalized URL: the earlier feed in the config keeps a shared article.
+    rank = {sid: i for i, sid in enumerate(source_ids)}
     seen: set[str] = set()
     deduped: list[NewsItem] = []
-    for it in sorted(collected, key=sort_key):
+    for it in sorted(
+        collected,
+        key=lambda it: (rank.get(it.source_id, len(rank)), -_item_timestamp(it), it.link),
+    ):
         nu = normalize_url(it.link)
         if nu in seen:
             continue
@@ -797,12 +722,11 @@ def build_html(
     items: list[NewsItem],
     generated_at: datetime | None = None,
     server_days: int | None = None,
-    gemini_model: str | None = None,
-    gemini_article_pages: bool = False,
-    read_news_summary_model: str = READ_NEWS_SUMMARY_MODEL_DEFAULT,
-    read_news_cloud_tts_voice: str = READ_NEWS_CLOUD_TTS_VOICE_EN_DEFAULT,
-    read_news_summary_model_fallback: str | None = None,
-    read_news_cloud_tts_voice_fallback: str | None = None,
+    summary_model: str | None = None,
+    summary_article_pages: bool = False,
+    read_news_azure_voice: str = READ_NEWS_AZURE_VOICE_EN_DEFAULT,
+    read_news_azure_voice_fallback: str = READ_NEWS_AZURE_VOICE_FALLBACK_EN_DEFAULT,
+    read_news_azure_region: str | None = None,
 ) -> str:
     when = (generated_at or datetime.now(timezone.utc)).strftime("%Y-%m-%d %H:%M UTC")
     day_default = str(server_days if server_days is not None else 14)
@@ -811,32 +735,25 @@ def build_html(
         if server_days is not None
         else "No server date window; use the control below to hide older cards in the browser."
     )
-    if gemini_model:
-        if gemini_article_pages:
-            gemini_note = (
-                f"Summaries and analysis were generated by Google Gemini ({gemini_model}) from plain text "
+    if summary_model:
+        if summary_article_pages:
+            summary_note = (
+                f"Summaries and analysis were generated by Groq ({summary_model}) from plain text "
                 f"extracted from each article page (not only RSS snippets); verify critical facts against the source."
             )
         else:
-            gemini_note = (
-                f"Summaries and analysis were generated by Google Gemini ({gemini_model}) from RSS excerpts only; "
+            summary_note = (
+                f"Summaries and analysis were generated by Groq ({summary_model}) from RSS excerpts only; "
                 f"verify critical facts against the original article."
             )
     else:
-        gemini_note = "Summaries are from RSS feeds; analysis uses local keyword heuristics (no LLM)."
-    tts_fallback = (
-        read_news_cloud_tts_voice_fallback
-        if read_news_cloud_tts_voice_fallback is not None
-        else READ_NEWS_CLOUD_TTS_VOICE_FALLBACK_EN_DEFAULT
-    )
+        summary_note = "Summaries are from RSS feeds; analysis uses local keyword heuristics (no LLM)."
     reader_frag = (
-        " Read news: "
-        + html_module.escape(read_news_summary_model)
-        + " prepares lines, Google Cloud Text-to-Speech synthesizes audio (voices "
-        + html_module.escape(read_news_cloud_tts_voice)
+        " Read news: Azure AI Speech synthesizes the summaries on this page (voice "
+        + html_module.escape(read_news_azure_voice)
         + " / fallback "
-        + html_module.escape(tts_fallback)
-        + "); Gemini + Cloud keys in-toolbar, sessionStorage only."
+        + html_module.escape(read_news_azure_voice_fallback)
+        + "); Azure key + region in-toolbar, saved in localStorage (persists across visits)."
     )
     cards: list[str] = []
     for it in items:
@@ -872,7 +789,7 @@ def build_html(
         )
 
     body = "\n".join(cards)
-    gemini_note_esc = html_module.escape(gemini_note)
+    summary_note_esc = html_module.escape(summary_note)
     filter_hint_esc = html_module.escape(
         f"{filter_note} Client filter hides cards without a machine date."
     ) + reader_frag
@@ -953,7 +870,7 @@ def build_html(
   <div class="wrap">
     <h1>Security news digest</h1>
     <p class="meta">Generated {html_module.escape(when)} · <span id="visibleCount">{len(items)}</span> shown<br/>
-    <span class="submeta">{gemini_note_esc}</span></p>
+    <span class="submeta">{summary_note_esc}</span></p>
     <div class="toolbar">
       <label>Show articles from last
         <input type="number" id="dayWindow" min="1" max="3650" value="{day_default}"/>
@@ -1006,13 +923,13 @@ def build_html(
   if (b2) b2.addEventListener("click", resetFilter);
 }})();
   </script>
+  {digest_reader_sdk_script_tag()}
   <script>
 {digest_reader_script(
         lang="en",
-        summary_model=read_news_summary_model,
-        cloud_tts_voice=read_news_cloud_tts_voice,
-        summary_model_fallback=read_news_summary_model_fallback,
-        cloud_tts_voice_fallback=read_news_cloud_tts_voice_fallback,
+        voice=read_news_azure_voice,
+        voice_fallback=read_news_azure_voice_fallback,
+        region_default=read_news_azure_region,
     )}
   </script>
 </body>
@@ -1066,22 +983,27 @@ def main() -> int:
         help="Only include items published in the last N days (requires parseable dates; others are dropped).",
     )
     parser.add_argument(
+        "--summarize",
         "--gemini",
+        dest="summarize",
         action="store_true",
-        help="Rewrite summary+analysis with Gemini (needs GEMINI_API_KEY or GOOGLE_API_KEY). "
-        "Uses chunked requests + pauses to reduce 429 quota errors on the free tier.",
+        help="Rewrite summary+analysis with an LLM via Groq (needs GROQ_API_KEY). "
+        "Uses chunked requests + pauses to reduce 429 rate-limit errors on the free tier.",
     )
     parser.add_argument(
-        "--gemini-model",
-        default="gemini-2.5-flash-lite",
-        help="Model id for generateContent (default: Gemini 2.5 Flash Lite, free tier). "
-        "Live-only ids (e.g. gemini-3.1-flash-live-preview) are not supported here—use AI Studio ListModels.",
-    )
-    parser.add_argument(
-        "--gemini-model-fallback",
-        default=READ_NEWS_SUMMARY_FALLBACK_MODEL_DEFAULT,
+        "--summary-model",
+        dest="summary_model",
+        default=groq.SUMMARY_MODEL_DEFAULT,
         metavar="MODEL_ID",
-        help="If the primary model fails after retries, retry each chunk with this model (default: Gemini 2.0 Flash).",
+        help=f"Groq chat model id (default: {groq.SUMMARY_MODEL_DEFAULT}). Format vendor/model.",
+    )
+    parser.add_argument(
+        "--summary-model-fallback",
+        dest="summary_model_fallback",
+        default=groq.SUMMARY_MODEL_FALLBACK_DEFAULT,
+        metavar="MODEL_ID",
+        help=f"If the primary model fails after retries, retry each chunk with this model "
+        f"(default: {groq.SUMMARY_MODEL_FALLBACK_DEFAULT}).",
     )
     parser.add_argument(
         "--gemini-max-excerpt-chars",
@@ -1151,28 +1073,22 @@ def main() -> int:
         help="Retries per chunk on transient Gemini errors (429, overload, 503, etc.; uses server 'retry in Xs' when present).",
     )
     parser.add_argument(
-        "--read-news-summary-model",
-        default=READ_NEWS_SUMMARY_MODEL_DEFAULT,
-        metavar="MODEL_ID",
-        help="Model for turning visible cards into read-aloud lines (JSON).",
-    )
-    parser.add_argument(
-        "--read-news-cloud-voice",
-        default=READ_NEWS_CLOUD_TTS_VOICE_EN_DEFAULT,
+        "--read-news-azure-voice",
+        default=READ_NEWS_AZURE_VOICE_EN_DEFAULT,
         metavar="VOICE_ID",
-        help="Google Cloud Text-to-Speech voice id (e.g. en-US-Neural2-J).",
+        help="Azure AI Speech neural voice id for the browser reader (e.g. en-US-AriaNeural).",
     )
     parser.add_argument(
-        "--read-news-summary-fallback-model",
-        default=READ_NEWS_SUMMARY_FALLBACK_MODEL_DEFAULT,
-        metavar="MODEL_ID",
-        help="Browser read-aloud: fallback if summary prep fails on the primary model.",
-    )
-    parser.add_argument(
-        "--read-news-cloud-voice-fallback",
-        default=READ_NEWS_CLOUD_TTS_VOICE_FALLBACK_EN_DEFAULT,
+        "--read-news-azure-voice-fallback",
+        default=READ_NEWS_AZURE_VOICE_FALLBACK_EN_DEFAULT,
         metavar="VOICE_ID",
-        help="Browser read-aloud: fallback Cloud TTS voice id if primary fails.",
+        help="Reader fallback Azure voice id if the primary voice fails.",
+    )
+    parser.add_argument(
+        "--read-news-azure-region",
+        default=None,
+        metavar="REGION",
+        help="Optional default Azure region prefilled in the reader toolbar (visitor can override).",
     )
     args = parser.parse_args()
 
@@ -1188,7 +1104,7 @@ def main() -> int:
         return 2
 
     if args.sources.strip().lower() == "all":
-        sids = sorted(feeds.keys())
+        sids = list(feeds.keys())  # config order (feeds are loaded in config sequence)
     else:
         sids = [s.strip().lower() for s in args.sources.split(",") if s.strip()]
 
@@ -1213,27 +1129,27 @@ def main() -> int:
             )
     items = items[: args.limit]
 
-    gemini_model_used: str | None = None
-    if args.gemini:
-        key = gemini_api_key()
+    summary_model_used: str | None = None
+    if args.summarize:
+        key = groq.groq_api_key()
         if not key:
             print(
-                "Error: --gemini requires GEMINI_API_KEY or GOOGLE_API_KEY in the environment.",
+                "Error: --summarize requires GROQ_API_KEY in the environment.",
                 file=sys.stderr,
             )
             return 2
         try:
             if not args.gemini_no_fetch_article:
                 print(
-                    "Gemini: fetching each article page and extracting text for summarization "
+                    "Summaries (Groq): fetching each article page and extracting text for summarization "
                     "(use --gemini-no-fetch-article to use RSS excerpts only).",
                     file=sys.stderr,
                 )
-            items, gemini_used_fallback = gemini_batch_enrich(
+            items, summary_used_fallback = groq_batch_enrich(
                 items,
                 api_key=key,
-                model=args.gemini_model,
-                model_fallback=args.gemini_model_fallback,
+                model=args.summary_model,
+                model_fallback=args.summary_model_fallback,
                 full_article=not args.gemini_no_fetch_article,
                 article_fetch_timeout_s=args.gemini_article_timeout,
                 article_max_bytes=args.gemini_article_max_bytes,
@@ -1246,15 +1162,15 @@ def main() -> int:
                 chunk_pause_s=args.gemini_chunk_pause,
                 max_retries=args.gemini_retries,
             )
-            gemini_model_used = args.gemini_model
-            if gemini_used_fallback:
-                gemini_model_used = f"{args.gemini_model} (fallback used: {args.gemini_model_fallback})"
+            summary_model_used = args.summary_model
+            if summary_used_fallback:
+                summary_model_used = f"{args.summary_model} (fallback used: {args.summary_model_fallback})"
             print(
-                f"Gemini batch enrichment OK ({gemini_model_used}, {len(items)} articles).",
+                f"Groq batch enrichment OK ({summary_model_used}, {len(items)} articles).",
                 file=sys.stderr,
             )
         except Exception as exc:  # noqa: BLE001
-            print(f"Gemini batch failed; keeping RSS/heuristic text: {exc}", file=sys.stderr)
+            print(f"Groq batch failed; keeping RSS/heuristic text: {exc}", file=sys.stderr)
 
     if args.html:
         out = Path(args.html)
@@ -1263,12 +1179,11 @@ def main() -> int:
             build_html(
                 items,
                 server_days=server_days,
-                gemini_model=gemini_model_used,
-                gemini_article_pages=bool(gemini_model_used) and not args.gemini_no_fetch_article,
-                read_news_summary_model=args.read_news_summary_model,
-                read_news_cloud_tts_voice=args.read_news_cloud_voice,
-                read_news_summary_model_fallback=args.read_news_summary_fallback_model,
-                read_news_cloud_tts_voice_fallback=args.read_news_cloud_voice_fallback,
+                summary_model=summary_model_used,
+                summary_article_pages=bool(summary_model_used) and not args.gemini_no_fetch_article,
+                read_news_azure_voice=args.read_news_azure_voice,
+                read_news_azure_voice_fallback=args.read_news_azure_voice_fallback,
+                read_news_azure_region=args.read_news_azure_region,
             ),
             encoding="utf-8",
         )

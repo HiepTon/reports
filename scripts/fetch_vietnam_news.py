@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """
-Tổng hợp tin RSS từ các báo Việt Nam, tóm tắt và gắn nhóm chủ đề bằng Gemini (tùy chọn).
+Tổng hợp tin RSS từ các báo Việt Nam, tóm tắt và gắn nhóm chủ đề bằng Groq (LLM, tùy chọn).
 
-Vietnam news digest: fetch RSS (Tuổi Trẻ, Thanh Niên, Dân Trí fetched first; global sort newest-first with
-priority tie-break). After date filtering, Tuổi Trẻ (tuoitre.vn) items are listed first, then **`--limit`** keeps the top N in that order (Tuổi Trẻ fills the digest until the cap).
-Optional --gemini for Vietnamese summaries + categories (by default loads each article page and extracts text for the model; use --gemini-no-fetch-article for RSS-only).
+Vietnam news digest: fetch RSS and order by feed sequence in the config file, then newest-first within
+each feed. Because Tuổi Trẻ, Thanh Niên and Dân Trí are listed first in the config, they lead the digest;
+Tuổi Trẻ items form the highlighted "Tin nổi bật" section. After date filtering, **`--limit`** keeps the
+top N in that order.
+Optional --summarize for Vietnamese summaries + categories (by default loads each article page and extracts text for the model; use --gemini-no-fetch-article for RSS-only).
 
 Usage:
   pip install -r requirements-vietnam-news.txt
   python scripts/fetch_vietnam_news.py --limit 15
-  GEMINI_API_KEY=... python scripts/fetch_vietnam_news.py --gemini --html output/vietnam/index.html
+  GROQ_API_KEY=... python scripts/fetch_vietnam_news.py --summarize --html output/vietnam/index.html
 """
 
 from __future__ import annotations
@@ -36,14 +38,14 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 from digest_reader_embed import (
-    READ_NEWS_CLOUD_TTS_VOICE_FALLBACK_VI_DEFAULT,
-    READ_NEWS_CLOUD_TTS_VOICE_VI_DEFAULT,
-    READ_NEWS_SUMMARY_FALLBACK_MODEL_DEFAULT,
-    READ_NEWS_SUMMARY_MODEL_DEFAULT,
+    READ_NEWS_AZURE_VOICE_FALLBACK_VI_DEFAULT,
+    READ_NEWS_AZURE_VOICE_VI_DEFAULT,
     digest_reader_css,
     digest_reader_script,
+    digest_reader_sdk_script_tag,
     digest_reader_toolbar_inner,
 )
+import groq_summary as groq
 from news_filters import (
     effective_cap,
     is_excluded,
@@ -71,10 +73,8 @@ VIETNAM_CATEGORY_LABELS: tuple[str, ...] = (
     "Khác",
 )
 
-# Fetch + sort: these source ids first (tuổi trẻ.vn, thanhnien.vn, dantri.com.vn), then others by time
-PRIORITY_SOURCE_ORDER: tuple[str, ...] = ("tuoitre", "thanhnien", "dantri")
-
-# After merge/limit: show tuoitre.vn first (“top news”), then other sources (each group newest-first).
+# Items are ordered by feed sequence in the config, then newest-first within each feed.
+# Tuổi Trẻ items (first feed in the config) lead and form the highlighted "Tin nổi bật" section.
 TOP_NEWS_SOURCE_ID = "tuoitre"
 
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -327,33 +327,14 @@ def parse_feed_try_urls(
     raise RuntimeError(f"{source_name}: all feed URLs failed ({len(errs)}): " + " | ".join(errs))
 
 
-def reorder_sources_for_priority(source_ids: list[str]) -> list[str]:
-    """tuoitre → thanhnien → dantri first (when present), then remaining ids in stable order."""
-    normalized = [s.strip().lower() for s in source_ids if s.strip()]
-    pri = [s for s in PRIORITY_SOURCE_ORDER if s in normalized]
-    rest = [s for s in normalized if s not in PRIORITY_SOURCE_ORDER]
-    return pri + rest
-
-
-def _priority_sort_tuple(source_id: str) -> tuple[int, int]:
-    sid = source_id.strip().lower()
-    try:
-        return (0, PRIORITY_SOURCE_ORDER.index(sid))
-    except ValueError:
-        return (1, 0)
-
-
-def sort_key(item: VietnamNewsItem) -> tuple[float, int, int, str]:
-    """Newest first globally; on equal timestamp, prefer tuoitre → thanhnien → dantri → others."""
-    pr = _priority_sort_tuple(item.source_id)
+def _item_timestamp(item: VietnamNewsItem) -> float:
+    """Epoch seconds for an item's published date (0.0 when missing/unparseable)."""
     if item.published:
         try:
-            ts = datetime.fromisoformat(item.published.replace("Z", "+00:00")).timestamp()
+            return datetime.fromisoformat(item.published.replace("Z", "+00:00")).timestamp()
         except ValueError:
-            ts = 0.0
-    else:
-        ts = 0.0
-    return (-ts, pr[0], pr[1], item.link)
+            return 0.0
+    return 0.0
 
 
 def _host_is_tuoitre(host: str) -> bool:
@@ -373,15 +354,6 @@ def _is_tuoitre_top_item(item: VietnamNewsItem) -> bool:
     return _host_is_tuoitre(host)
 
 
-def prioritize_tuoitre_top(items: list[VietnamNewsItem]) -> list[VietnamNewsItem]:
-    """Tuổi Trẻ first (newest within group), then other sources (newest within group)."""
-    top = [x for x in items if _is_tuoitre_top_item(x)]
-    rest = [x for x in items if not _is_tuoitre_top_item(x)]
-    top.sort(key=sort_key)
-    rest.sort(key=sort_key)
-    return top + rest
-
-
 def gather(
     feeds: dict[str, tuple[str, str, list[str], int | None]],
     source_ids: list[str],
@@ -390,7 +362,7 @@ def gather(
     pause_s: float,
     exclude_keywords: list[str] | None = None,
 ) -> list[VietnamNewsItem]:
-    source_ids = reorder_sources_for_priority(source_ids)
+    source_ids = [s.strip().lower() for s in source_ids if s.strip()]
     collected: list[VietnamNewsItem] = []
     errors: list[str] = []
     keywords = exclude_keywords or []
@@ -420,9 +392,15 @@ def gather(
         for e in errors:
             print(f"  - {e}", file=sys.stderr)
 
+    # Order by feed sequence in the config (source_ids order), then newest-first within each feed.
+    # Dedupe by normalized URL: the earlier feed in the config keeps a shared article.
+    rank = {sid: i for i, sid in enumerate(source_ids)}
     seen: set[str] = set()
     deduped: list[VietnamNewsItem] = []
-    for it in sorted(collected, key=sort_key):
+    for it in sorted(
+        collected,
+        key=lambda it: (rank.get(it.source_id.strip().lower(), len(rank)), -_item_timestamp(it), it.link),
+    ):
         nu = normalize_url(it.link)
         if nu in seen:
             continue
@@ -439,10 +417,6 @@ def strip_json_fenced_text(text: str) -> str:
     return t.strip()
 
 
-def gemini_api_key() -> str | None:
-    return (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip() or None
-
-
 def _is_gemini_json_retryable(exc: BaseException) -> bool:
     if isinstance(exc, json.JSONDecodeError):
         return True
@@ -452,51 +426,6 @@ def _is_gemini_json_retryable(exc: BaseException) -> bool:
         or "invalid control character" in msg
         or "invalid \\escape" in msg
     )
-
-
-def _is_gemini_rate_limit(exc: BaseException) -> bool:
-    try:
-        from google.genai import errors as genai_errors
-
-        if isinstance(exc, genai_errors.APIError) and getattr(exc, "code", None) == 429:
-            return True
-    except ImportError:
-        pass
-    msg = str(exc).upper()
-    return "429" in msg or "RESOURCE_EXHAUSTED" in msg
-
-
-def _gemini_retry_sleep_seconds(exc: BaseException, attempt: int) -> float:
-    m = _RETRY_IN_RE.search(str(exc))
-    if m:
-        return min(max(float(m.group(1)) + 2.0, 6.0), 120.0)
-    return min(15.0 * (2**attempt), 120.0)
-
-
-def _gemini_transient_retryable(exc: BaseException) -> bool:
-    if _is_gemini_rate_limit(exc):
-        return True
-    msg_l = str(exc).lower()
-    for needle in (
-        "high demand",
-        "try again later",
-        "overloaded",
-        "temporarily unavailable",
-        "service unavailable",
-    ):
-        if needle in msg_l:
-            return True
-    try:
-        from google.genai import errors as genai_errors
-
-        if isinstance(exc, genai_errors.APIError):
-            code = getattr(exc, "code", None)
-            if code in (500, 503):
-                return True
-    except ImportError:
-        pass
-    u = str(exc).upper()
-    return "UNAVAILABLE" in u
 
 
 def _gemini_model_candidates(primary: str, fallback: str | None) -> list[str]:
@@ -627,7 +556,7 @@ def _gemini_payload_rows_vn(
     return payload
 
 
-def gemini_vietnam_enrich(
+def groq_vietnam_enrich(
     items: list[VietnamNewsItem],
     *,
     api_key: str,
@@ -649,13 +578,6 @@ def gemini_vietnam_enrich(
 ) -> tuple[list[VietnamNewsItem], bool]:
     if not items:
         return items, False
-
-    try:
-        from google import genai
-        from google.genai import errors as genai_errors
-        from google.genai import types
-    except ImportError as exc:
-        raise RuntimeError("Install google-genai (see requirements-vietnam-news.txt).") from exc
 
     cats_literal = " | ".join(VIETNAM_CATEGORY_LABELS)
     if full_article:
@@ -689,7 +611,6 @@ def gemini_vietnam_enrich(
     if chunk_size <= 0 or chunk_size > n:
         chunk_size = n
 
-    client = genai.Client(api_key=api_key)
     out = list(items)
     used_fallback = False
     model_candidates = _gemini_model_candidates(model, model_fallback)
@@ -730,25 +651,21 @@ def gemini_vietnam_enrich(
                 tokens_this_chunk = min(max_output_tokens, int(base_cap * (1.4**attempt)))
 
                 try:
-                    resp = client.models.generate_content(
+                    raw_text = groq.chat_text(
+                        token=api_key,
                         model=active_model,
-                        contents=prompt,
-                        config=types.GenerateContentConfig(
-                            temperature=0.35,
-                            max_output_tokens=tokens_this_chunk,
-                            response_mime_type="application/json",
-                            http_options=types.HttpOptions(timeout=request_timeout_s * 1000),
-                        ),
+                        prompt=prompt,
+                        max_tokens=tokens_this_chunk,
+                        temperature=0.35,
+                        timeout_s=request_timeout_s,
                     )
-                    raw_text = (getattr(resp, "text", None) or "").strip()
                     if not raw_text:
-                        pf = getattr(resp, "prompt_feedback", None)
-                        raise RuntimeError(f"Gemini returned empty text. prompt_feedback={pf!r}")
+                        raise RuntimeError("Groq returned empty text.")
 
                     rows = _parse_gemini_json_list(raw_text)
                     if len(rows) != len(indices):
                         print(
-                            f"Warning: Gemini returned {len(rows)} rows for chunk {start}-{end - 1}, "
+                            f"Warning: Groq returned {len(rows)} rows for chunk {start}-{end - 1}, "
                             f"expected {len(indices)}; merging partial.",
                             file=sys.stderr,
                         )
@@ -767,28 +684,16 @@ def gemini_vietnam_enrich(
                     if mi > 0:
                         used_fallback = True
                         print(
-                            f"Gemini chunk {start}-{end - 1}: OK (fallback model {active_model!r}).",
+                            f"Groq chunk {start}-{end - 1}: OK (fallback model {active_model!r}).",
                             file=sys.stderr,
                         )
                     break
-                except genai_errors.APIError as exc:
+                except Exception as exc:  # noqa: BLE001 — retry transient/JSON, else next model
                     last_err = exc
-                    if _gemini_transient_retryable(exc) and attempt < max_retries - 1:
-                        delay = _gemini_retry_sleep_seconds(exc, attempt)
+                    if groq.is_transient(exc) and attempt < max_retries - 1:
+                        delay = groq.retry_sleep_seconds(exc, attempt)
                         print(
-                            f"Gemini lỗi tạm thời; chunk {start}-{end - 1}, chờ {delay:.1f}s "
-                            f"(lần {attempt + 2}/{max_retries}, model={active_model!r}).",
-                            file=sys.stderr,
-                        )
-                        time.sleep(delay)
-                        continue
-                    break
-                except Exception as exc:
-                    last_err = exc
-                    if _gemini_transient_retryable(exc) and attempt < max_retries - 1:
-                        delay = _gemini_retry_sleep_seconds(exc, attempt)
-                        print(
-                            f"Gemini lỗi tạm thời; chunk {start}-{end - 1}, chờ {delay:.1f}s "
+                            f"Groq lỗi tạm thời; chunk {start}-{end - 1}, chờ {delay:.1f}s "
                             f"(lần {attempt + 2}/{max_retries}, model={active_model!r}).",
                             file=sys.stderr,
                         )
@@ -797,7 +702,7 @@ def gemini_vietnam_enrich(
                     if _is_gemini_json_retryable(exc) and attempt < max_retries - 1:
                         delay = min(5.0 * (1.6**attempt), 90.0)
                         print(
-                            f"Gemini JSON lỗi ({exc!s}); chunk {start}-{end - 1}, chờ {delay:.1f}s "
+                            f"Groq JSON lỗi ({exc!s}); chunk {start}-{end - 1}, chờ {delay:.1f}s "
                             f"(lần {attempt + 2}/{max_retries}, max_output_tokens={tokens_this_chunk}).",
                             file=sys.stderr,
                         )
@@ -810,7 +715,7 @@ def gemini_vietnam_enrich(
 
             if mi < len(model_candidates) - 1:
                 print(
-                    f"Gemini chunk {start}-{end - 1}: model {active_model!r} thất bại ({last_err!s}); "
+                    f"Groq chunk {start}-{end - 1}: model {active_model!r} thất bại ({last_err!s}); "
                     f"thử {model_candidates[mi + 1]!r}.",
                     file=sys.stderr,
                 )
@@ -864,12 +769,11 @@ def build_html(
     *,
     generated_at: datetime | None = None,
     server_days: int | None = None,
-    gemini_model: str | None = None,
-    gemini_article_pages: bool = False,
-    read_news_summary_model: str = READ_NEWS_SUMMARY_MODEL_DEFAULT,
-    read_news_cloud_tts_voice: str = READ_NEWS_CLOUD_TTS_VOICE_VI_DEFAULT,
-    read_news_summary_model_fallback: str | None = None,
-    read_news_cloud_tts_voice_fallback: str | None = None,
+    summary_model: str | None = None,
+    summary_article_pages: bool = False,
+    read_news_azure_voice: str = READ_NEWS_AZURE_VOICE_VI_DEFAULT,
+    read_news_azure_voice_fallback: str = READ_NEWS_AZURE_VOICE_FALLBACK_VI_DEFAULT,
+    read_news_azure_region: str | None = None,
 ) -> str:
     when = (generated_at or datetime.now(timezone.utc)).strftime("%Y-%m-%d %H:%M UTC")
     day_default = str(server_days if server_days is not None else 7)
@@ -878,33 +782,26 @@ def build_html(
         if server_days is not None
         else "Không lọc ngày trên server; dùng ô bên dưới để lọc trong trình duyệt."
     )
-    if gemini_model:
-        if gemini_article_pages:
+    if summary_model:
+        if summary_article_pages:
             ai_note = (
-                f"Tóm tắt và nhóm chủ đề: Google Gemini ({gemini_model}), theo văn bản trích từ trang bài báo "
+                f"Tóm tắt và nhóm chủ đề: Groq ({summary_model}), theo văn bản trích từ trang bài báo "
                 f"(không chỉ RSS). Tin Tuổi Trẻ (tuoitre.vn) hiển thị trước trong mục tin nổi bật."
             )
         else:
             ai_note = (
-                f"Tóm tắt và nhóm chủ đề: Google Gemini ({gemini_model}), theo đoạn RSS. "
+                f"Tóm tắt và nhóm chủ đề: Groq ({summary_model}), theo đoạn RSS. "
                 f"Tin Tuổi Trẻ (tuoitre.vn) hiển thị trước trong mục tin nổi bật."
             )
     else:
-        ai_note = "Tóm tắt từ RSS; nhóm chủ đề: Chưa phân loại (chạy với --gemini để dùng AI). Tin Tuổi Trẻ hiển thị trước trong mục tin nổi bật."
+        ai_note = "Tóm tắt từ RSS; nhóm chủ đề: Chưa phân loại (chạy với --summarize để dùng AI). Tin Tuổi Trẻ hiển thị trước trong mục tin nổi bật."
 
-    tts_fallback = (
-        read_news_cloud_tts_voice_fallback
-        if read_news_cloud_tts_voice_fallback is not None
-        else READ_NEWS_CLOUD_TTS_VOICE_FALLBACK_VI_DEFAULT
-    )
     reader_hint = (
-        " Nút Đọc tin: "
-        + html_module.escape(read_news_summary_model)
-        + " soạn lời (Gemini), Google Cloud Text-to-Speech đọc (giọng "
-        + html_module.escape(read_news_cloud_tts_voice)
+        " Nút Đọc tin: Azure AI Speech đọc các bản tóm tắt trên trang (giọng "
+        + html_module.escape(read_news_azure_voice)
         + " / dự phòng "
-        + html_module.escape(tts_fallback)
-        + "); hai API key trong ô phía trên."
+        + html_module.escape(read_news_azure_voice_fallback)
+        + "); nhập khóa Azure + vùng ở ô phía trên."
     )
 
     idx = 0
@@ -1034,13 +931,13 @@ def build_html(
   if (b2) b2.addEventListener("click", resetFilter);
 }})();
   </script>
+  {digest_reader_sdk_script_tag()}
   <script>
 {digest_reader_script(
         lang="vi",
-        summary_model=read_news_summary_model,
-        cloud_tts_voice=read_news_cloud_tts_voice,
-        summary_model_fallback=read_news_summary_model_fallback,
-        cloud_tts_voice_fallback=read_news_cloud_tts_voice_fallback,
+        voice=read_news_azure_voice,
+        voice_fallback=read_news_azure_voice_fallback,
+        region_default=read_news_azure_region,
     )}
   </script>
 </body>
@@ -1082,11 +979,12 @@ def main() -> int:
     parser.add_argument("--days", type=int, default=None, metavar="N")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--html", metavar="PATH")
-    parser.add_argument("--gemini", action="store_true")
-    parser.add_argument("--gemini-model", default="gemini-2.5-flash-lite")
+    parser.add_argument("--summarize", "--gemini", dest="summarize", action="store_true")
+    parser.add_argument("--summary-model", dest="summary_model", default=groq.SUMMARY_MODEL_DEFAULT, metavar="MODEL_ID")
     parser.add_argument(
-        "--gemini-model-fallback",
-        default=READ_NEWS_SUMMARY_FALLBACK_MODEL_DEFAULT,
+        "--summary-model-fallback",
+        dest="summary_model_fallback",
+        default=groq.SUMMARY_MODEL_FALLBACK_DEFAULT,
         metavar="MODEL_ID",
         help="Nếu model chính thất bại sau các lần thử, thử lại từng chunk với model này.",
     )
@@ -1106,28 +1004,22 @@ def main() -> int:
     parser.add_argument("--gemini-chunk-pause", type=float, default=28.0)
     parser.add_argument("--gemini-retries", type=int, default=7)
     parser.add_argument(
-        "--read-news-summary-model",
-        default=READ_NEWS_SUMMARY_MODEL_DEFAULT,
-        metavar="MODEL_ID",
-        help="Model for turning visible cards into read-aloud lines (JSON).",
-    )
-    parser.add_argument(
-        "--read-news-cloud-voice",
-        default=READ_NEWS_CLOUD_TTS_VOICE_VI_DEFAULT,
+        "--read-news-azure-voice",
+        default=READ_NEWS_AZURE_VOICE_VI_DEFAULT,
         metavar="VOICE_ID",
-        help="Google Cloud Text-to-Speech: mã giọng (vd. vi-VN-Neural2-D).",
+        help="Azure AI Speech: mã giọng neural cho trình đọc (vd. vi-VN-HoaiMyNeural).",
     )
     parser.add_argument(
-        "--read-news-summary-fallback-model",
-        default=READ_NEWS_SUMMARY_FALLBACK_MODEL_DEFAULT,
-        metavar="MODEL_ID",
-        help="Đọc tin (trình duyệt): model dự phòng khi soạn lỗi sai.",
-    )
-    parser.add_argument(
-        "--read-news-cloud-voice-fallback",
-        default=READ_NEWS_CLOUD_TTS_VOICE_FALLBACK_VI_DEFAULT,
+        "--read-news-azure-voice-fallback",
+        default=READ_NEWS_AZURE_VOICE_FALLBACK_VI_DEFAULT,
         metavar="VOICE_ID",
-        help="Đọc tin (trình duyệt): giọng Cloud TTS dự phòng.",
+        help="Đọc tin: giọng Azure dự phòng nếu giọng chính lỗi.",
+    )
+    parser.add_argument(
+        "--read-news-azure-region",
+        default=None,
+        metavar="REGION",
+        help="Vùng Azure mặc định điền sẵn trong ô đọc tin (người xem có thể sửa).",
     )
     args = parser.parse_args()
 
@@ -1142,9 +1034,9 @@ def main() -> int:
         print(f"Lỗi đọc feeds: {feeds_path}: {exc}", file=sys.stderr)
         return 2
 
-    sids = sorted(feeds.keys()) if args.sources.strip().lower() == "all" else [
+    sids = list(feeds.keys()) if args.sources.strip().lower() == "all" else [
         s.strip().lower() for s in args.sources.split(",") if s.strip()
-    ]
+    ]  # "all" keeps config order (feeds are loaded in config sequence)
 
     exclude_keywords = load_config_exclude_keywords(feeds_path) + parse_cli_keywords(args.exclude_keywords)
     items = gather(feeds, sids, args.per_source, args.timeout, args.pause, exclude_keywords=exclude_keywords)
@@ -1157,27 +1049,27 @@ def main() -> int:
                 f"Lọc --days {args.days}: bỏ {dold} bài quá cũ, {dnd} bài không có ngày.",
                 file=sys.stderr,
             )
-    items = prioritize_tuoitre_top(items)
+    # gather() already ordered items by config feed sequence then time; just apply the cap.
     items = items[: args.limit]
 
-    gemini_model_used: str | None = None
-    if args.gemini:
-        key = gemini_api_key()
+    summary_model_used: str | None = None
+    if args.summarize:
+        key = groq.groq_api_key()
         if not key:
-            print("Cần GEMINI_API_KEY hoặc GOOGLE_API_KEY khi dùng --gemini.", file=sys.stderr)
+            print("Cần GROQ_API_KEY khi dùng --summarize.", file=sys.stderr)
             return 2
         try:
             if not args.gemini_no_fetch_article:
                 print(
-                    "Gemini: đang tải từng trang bài và trích văn bản để tóm tắt "
+                    "Tóm tắt (Groq): đang tải từng trang bài và trích văn bản để tóm tắt "
                     "(thêm --gemini-no-fetch-article nếu chỉ muốn RSS).",
                     file=sys.stderr,
                 )
-            items, vn_fallback_used = gemini_vietnam_enrich(
+            items, vn_fallback_used = groq_vietnam_enrich(
                 items,
                 api_key=key,
-                model=args.gemini_model,
-                model_fallback=args.gemini_model_fallback,
+                model=args.summary_model,
+                model_fallback=args.summary_model_fallback,
                 full_article=not args.gemini_no_fetch_article,
                 article_fetch_timeout_s=args.gemini_article_timeout,
                 article_max_bytes=args.gemini_article_max_bytes,
@@ -1190,12 +1082,12 @@ def main() -> int:
                 chunk_pause_s=args.gemini_chunk_pause,
                 max_retries=args.gemini_retries,
             )
-            gemini_model_used = args.gemini_model
+            summary_model_used = args.summary_model
             if vn_fallback_used:
-                gemini_model_used = f"{args.gemini_model} (fallback used: {args.gemini_model_fallback})"
-            print(f"Gemini OK ({gemini_model_used}, {len(items)} bài).", file=sys.stderr)
+                summary_model_used = f"{args.summary_model} (fallback used: {args.summary_model_fallback})"
+            print(f"Groq OK ({summary_model_used}, {len(items)} bài).", file=sys.stderr)
         except Exception as exc:  # noqa: BLE001
-            print(f"Gemini lỗi, giữ tóm tắt RSS: {exc}", file=sys.stderr)
+            print(f"Groq lỗi, giữ tóm tắt RSS: {exc}", file=sys.stderr)
 
     if args.html:
         out = Path(args.html)
@@ -1204,12 +1096,11 @@ def main() -> int:
             build_html(
                 items,
                 server_days=server_days,
-                gemini_model=gemini_model_used,
-                gemini_article_pages=bool(gemini_model_used) and not args.gemini_no_fetch_article,
-                read_news_summary_model=args.read_news_summary_model,
-                read_news_cloud_tts_voice=args.read_news_cloud_voice,
-                read_news_summary_model_fallback=args.read_news_summary_fallback_model,
-                read_news_cloud_tts_voice_fallback=args.read_news_cloud_voice_fallback,
+                summary_model=summary_model_used,
+                summary_article_pages=bool(summary_model_used) and not args.gemini_no_fetch_article,
+                read_news_azure_voice=args.read_news_azure_voice,
+                read_news_azure_voice_fallback=args.read_news_azure_voice_fallback,
+                read_news_azure_region=args.read_news_azure_region,
             ),
             encoding="utf-8",
         )

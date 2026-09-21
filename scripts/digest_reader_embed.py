@@ -1,15 +1,29 @@
-"""Shared HTML/CSS/JS for on-page Read news: Gemini prepares read-aloud lines; Google Cloud TTS synthesizes audio."""
+"""Shared HTML/CSS/JS for the on-page "Read news" control.
+
+The reader speaks the summaries already baked into each card by the CI build
+(no in-browser LLM). Audio is synthesized client-side with the Azure AI Speech
+SDK, which is the CORS-safe way to call Azure TTS from a browser. The visitor
+supplies an Azure Speech resource key + region once (kept in localStorage so it
+persists across visits until the visitor edits or clears it).
+"""
 
 from __future__ import annotations
 
-# Text prep for read-aloud (batched JSON array of strings); must support generateContent
-READ_NEWS_SUMMARY_MODEL_DEFAULT = "gemini-2.5-flash-lite"
-READ_NEWS_SUMMARY_FALLBACK_MODEL_DEFAULT = "gemini-2.0-flash"
-# Audio synthesis via Cloud Text-to-Speech (voice name = GCP voice ID, see Cloud TTS voice list).
-READ_NEWS_CLOUD_TTS_VOICE_EN_DEFAULT = "en-US-Neural2-J"
-READ_NEWS_CLOUD_TTS_VOICE_VI_DEFAULT = "vi-VN-Neural2-D"
-READ_NEWS_CLOUD_TTS_VOICE_FALLBACK_EN_DEFAULT = "en-US-Wavenet-D"
-READ_NEWS_CLOUD_TTS_VOICE_FALLBACK_VI_DEFAULT = "vi-VN-Wavenet-B"
+import json
+
+# Azure Neural voice ids (see Azure AI Speech voice list).
+READ_NEWS_AZURE_VOICE_EN_DEFAULT = "en-US-AriaNeural"
+READ_NEWS_AZURE_VOICE_VI_DEFAULT = "vi-VN-HoaiMyNeural"
+READ_NEWS_AZURE_VOICE_FALLBACK_EN_DEFAULT = "en-US-JennyNeural"
+READ_NEWS_AZURE_VOICE_FALLBACK_VI_DEFAULT = "vi-VN-NamMinhNeural"
+
+# Official browser bundle (redirects to the Azure CDN); self-hosted page has no CSP.
+AZURE_SPEECH_SDK_URL = "https://aka.ms/csspeech/jsbrowserpackageraw"
+
+
+def digest_reader_sdk_script_tag() -> str:
+    """The <script> tag that loads the Azure Speech SDK browser bundle (window.SpeechSDK)."""
+    return f'<script src="{AZURE_SPEECH_SDK_URL}"></script>'
 
 
 def digest_reader_css() -> str:
@@ -18,9 +32,10 @@ def digest_reader_css() -> str:
     .reader-key-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem 0.65rem; width: 100%; font-size: 0.88rem; }
     .reader-key-row label { color: var(--muted); font-weight: 600; }
     .reader-api-input {
-      flex: 1 1 14rem; min-width: 11rem; max-width: 100%; padding: 0.4rem 0.55rem; border-radius: 6px;
+      flex: 1 1 12rem; min-width: 9rem; max-width: 100%; padding: 0.4rem 0.55rem; border-radius: 6px;
       border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.88rem;
     }
+    .reader-region-input { flex: 0 1 8rem; min-width: 6rem; }
     .reader-save-key { flex: 0 0 auto; }
     .reader-key-hint { flex: 1 1 10rem; font-size: 0.78rem; color: var(--muted); }
     .reader-actions-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; }
@@ -51,14 +66,12 @@ def digest_reader_toolbar_inner(*, lang: str) -> str:
     if lang == "vi":
         return """<div class="reader-tools">
       <div class="reader-key-row">
-        <label for="readerApiKeyInput">API key Gemini (Google AI Studio)</label>
-        <input type="password" id="readerApiKeyInput" class="reader-api-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Tóm tắt bài → generateContent"/>
+        <label for="readerAzureKeyInput">Khóa Azure Speech</label>
+        <input type="password" id="readerAzureKeyInput" class="reader-api-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Khóa tài nguyên Speech"/>
+        <label for="readerAzureRegionInput">Vùng</label>
+        <input type="text" id="readerAzureRegionInput" class="reader-api-input reader-region-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="vd: southeastasia"/>
+        <button type="button" class="reset reader-save-key" id="saveReaderApiKey">Lưu</button>
         <span id="readerKeySavedHint" class="reader-key-hint" aria-live="polite"></span>
-      </div>
-      <div class="reader-key-row">
-        <label for="readerCloudTtsKeyInput">API key Google Cloud (Text-to-Speech)</label>
-        <input type="password" id="readerCloudTtsKeyInput" class="reader-api-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Giọng đọc → texttospeech.googleapis.com"/>
-        <button type="button" class="reset reader-save-key" id="saveReaderApiKey">Lưu khóa</button>
       </div>
       <div class="reader-actions-row">
         <button type="button" class="apply read" id="readNews">Đọc tin</button>
@@ -74,14 +87,12 @@ def digest_reader_toolbar_inner(*, lang: str) -> str:
     </div>"""
     return """<div class="reader-tools">
       <div class="reader-key-row">
-        <label for="readerApiKeyInput">Gemini API key (Google AI Studio)</label>
-        <input type="password" id="readerApiKeyInput" class="reader-api-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Article summaries → generateContent"/>
+        <label for="readerAzureKeyInput">Azure Speech key</label>
+        <input type="password" id="readerAzureKeyInput" class="reader-api-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Speech resource key"/>
+        <label for="readerAzureRegionInput">Region</label>
+        <input type="text" id="readerAzureRegionInput" class="reader-api-input reader-region-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g. eastus"/>
+        <button type="button" class="reset reader-save-key" id="saveReaderApiKey">Save</button>
         <span id="readerKeySavedHint" class="reader-key-hint" aria-live="polite"></span>
-      </div>
-      <div class="reader-key-row">
-        <label for="readerCloudTtsKeyInput">Google Cloud API key (Text-to-Speech)</label>
-        <input type="password" id="readerCloudTtsKeyInput" class="reader-api-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Speech → texttospeech.googleapis.com"/>
-        <button type="button" class="reset reader-save-key" id="saveReaderApiKey">Save keys</button>
       </div>
       <div class="reader-actions-row">
         <button type="button" class="apply read" id="readNews">Read news</button>
@@ -100,48 +111,35 @@ def digest_reader_toolbar_inner(*, lang: str) -> str:
 def digest_reader_script(
     *,
     lang: str,
-    summary_model: str,
-    cloud_tts_voice: str,
-    summary_model_fallback: str | None = None,
-    cloud_tts_voice_fallback: str | None = None,
+    voice: str,
+    voice_fallback: str | None = None,
+    region_default: str | None = None,
 ) -> str:
-    """Inline script; Gemini models and Cloud voice IDs embedded as JSON strings."""
-    import json
-
-    sm = json.dumps(summary_model)
-    cv = json.dumps(cloud_tts_voice)
-    cv_fb_raw = cloud_tts_voice_fallback or (
-        READ_NEWS_CLOUD_TTS_VOICE_FALLBACK_VI_DEFAULT
-        if lang == "vi"
-        else READ_NEWS_CLOUD_TTS_VOICE_FALLBACK_EN_DEFAULT
+    """Inline reader script. Reads baked card text and synthesizes via the Azure Speech SDK."""
+    vf_raw = voice_fallback or (
+        READ_NEWS_AZURE_VOICE_FALLBACK_VI_DEFAULT if lang == "vi" else READ_NEWS_AZURE_VOICE_FALLBACK_EN_DEFAULT
     )
-    cv_fb = json.dumps(cv_fb_raw)
-    sm_fb = json.dumps(summary_model_fallback or READ_NEWS_SUMMARY_FALLBACK_MODEL_DEFAULT)
+    v = json.dumps(voice)
+    vf = json.dumps(vf_raw)
     l = json.dumps(lang)
+    rd = json.dumps(region_default or "")
     return f"""
 (function() {{
   var LANG = {l};
-  var SUMMARY_MODEL = {sm};
-  var CLOUD_VOICE = {cv};
-  var CLOUD_VOICE_FALLBACK = {cv_fb};
-  var SUMMARY_FALLBACK = {sm_fb};
-  var CLOUD_TTS_URL = "https://texttospeech.googleapis.com/v1/text:synthesize";
-  var CLOUD_TTS_SAMPLE_HZ = 24000;
-  var CLOUD_TTS_MAX_CHARS = 4800;
+  var VOICE = {v};
+  var VOICE_FALLBACK = {vf};
+  var DEFAULT_REGION = {rd};
   try {{
     var sp = new URLSearchParams(window.location.search || "");
-    var sm = sp.get("summaryModel");
     var rv = sp.get("readerVoice");
     var rvf = sp.get("readerVoiceFallback");
-    var smf = sp.get("summaryFallbackModel");
-    if (sm && String(sm).trim()) SUMMARY_MODEL = String(sm).trim();
-    if (rv && String(rv).trim()) CLOUD_VOICE = String(rv).trim();
-    if (rvf && String(rvf).trim()) CLOUD_VOICE_FALLBACK = String(rvf).trim();
-    if (smf && String(smf).trim()) SUMMARY_FALLBACK = String(smf).trim();
+    var rr = sp.get("readerRegion");
+    if (rv && String(rv).trim()) VOICE = String(rv).trim();
+    if (rvf && String(rvf).trim()) VOICE_FALLBACK = String(rvf).trim();
+    if (rr && String(rr).trim()) DEFAULT_REGION = String(rr).trim();
   }} catch (e) {{}}
-  var KEY_GEMINI = "reportsDigestReaderApiKey";
-  var KEY_CLOUD_TTS = "reportsDigestReaderCloudTtsApiKey";
-  var API_BASE = "https://generativelanguage.googleapis.com/v1beta/models/";
+  var KEY_AZURE = "reportsDigestReaderAzureKey";
+  var KEY_REGION = "reportsDigestReaderAzureRegion";
   var readAborted = false;
   var currentAudio = null;
   var RATE_STORAGE_KEY = "reportsDigestReaderSpeechRate";
@@ -154,15 +152,11 @@ def digest_reader_script(
     if (!isFinite(r)) return 1;
     return Math.min(RATE_MAX, Math.max(RATE_MIN, Math.round(r / RATE_STEP) * RATE_STEP));
   }}
-
   function persistSpeechRate(r) {{
     r = clampSpeechRate(r);
-    try {{
-      sessionStorage.setItem(RATE_STORAGE_KEY, String(r));
-    }} catch (e) {{}}
+    try {{ sessionStorage.setItem(RATE_STORAGE_KEY, String(r)); }} catch (e) {{}}
     return r;
   }}
-
   function loadSpeechRateOnce() {{
     var fromQs = null;
     try {{
@@ -173,34 +167,23 @@ def digest_reader_script(
         if (isFinite(q)) fromQs = clampSpeechRate(q);
       }}
     }} catch (e) {{}}
-    if (fromQs != null) {{
-      speechRateCached = persistSpeechRate(fromQs);
-      return;
-    }}
+    if (fromQs != null) {{ speechRateCached = persistSpeechRate(fromQs); return; }}
     try {{
       var raw = sessionStorage.getItem(RATE_STORAGE_KEY);
       if (raw != null && String(raw).trim() !== "") {{
-        var v = parseFloat(String(raw).replace(",", "."));
-        if (isFinite(v)) {{
-          speechRateCached = clampSpeechRate(v);
-          return;
-        }}
+        var val = parseFloat(String(raw).replace(",", "."));
+        if (isFinite(val)) {{ speechRateCached = clampSpeechRate(val); return; }}
       }}
     }} catch (e) {{}}
     speechRateCached = 1;
   }}
-
-  function getSpeechRate() {{
-    return speechRateCached;
-  }}
-
+  function getSpeechRate() {{ return speechRateCached; }}
   function formatSpeechRateDisplay(r) {{
     var x = clampSpeechRate(r);
     var s = (Math.round(x * 100) / 100).toString();
     if (s.indexOf(".") === -1) s += ".0";
     return s + "\\u00d7";
   }}
-
   function refreshSpeechRateUI() {{
     var el = document.getElementById("readerSpeedValue");
     var dn = document.getElementById("readerSpeedDown");
@@ -211,20 +194,15 @@ def digest_reader_script(
     if (up) up.disabled = rr >= RATE_MAX - 1e-9;
     applySpeechRateToPlayingAudio();
   }}
-
   function applySpeechRateToPlayingAudio() {{
     if (currentAudio && currentAudio.playbackRate != null) {{
-      try {{
-        currentAudio.playbackRate = getSpeechRate();
-      }} catch (e) {{}}
+      try {{ currentAudio.playbackRate = getSpeechRate(); }} catch (e) {{}}
     }}
   }}
-
   function bumpSpeechRate(delta) {{
     speechRateCached = persistSpeechRate(getSpeechRate() + delta);
     refreshSpeechRateUI();
   }}
-
   loadSpeechRateOnce();
 
   function status(msg, isErr) {{
@@ -233,294 +211,125 @@ def digest_reader_script(
     el.textContent = msg || "";
     el.className = isErr ? "err" : "";
   }}
-
   function readKeyHint(msg) {{
     var el = document.getElementById("readerKeySavedHint");
-    if (!el) return;
-    el.textContent = msg || "";
+    if (el) el.textContent = msg || "";
   }}
 
-  function readStoredGeminiKey() {{
-    try {{
-      var k = sessionStorage.getItem(KEY_GEMINI);
-      return k ? String(k).trim() : "";
-    }} catch (e) {{
-      return "";
-    }}
+  function readStored(k) {{
+    // localStorage so the key + region persist across days (until the visitor edits/clears them).
+    try {{ var v = localStorage.getItem(k); return v ? String(v).trim() : ""; }} catch (e) {{ return ""; }}
   }}
-
-  function readStoredCloudTtsKey() {{
-    try {{
-      var k = sessionStorage.getItem(KEY_CLOUD_TTS);
-      return k ? String(k).trim() : "";
-    }} catch (e) {{
-      return "";
-    }}
+  function getAzureKey() {{
+    var s = readStored(KEY_AZURE);
+    if (s) return s;
+    var inp = document.getElementById("readerAzureKeyInput");
+    return inp ? String(inp.value || "").trim() : "";
   }}
-
+  function getAzureRegion() {{
+    var inp = document.getElementById("readerAzureRegionInput");
+    var live = inp ? String(inp.value || "").trim() : "";
+    if (live) return live;
+    var s = readStored(KEY_REGION);
+    return s || DEFAULT_REGION || "";
+  }}
   function persistReaderKeys() {{
-    var gemInp = document.getElementById("readerApiKeyInput");
-    var cloudInp = document.getElementById("readerCloudTtsKeyInput");
-    var g = gemInp ? String(gemInp.value || "").trim() : "";
-    var c = cloudInp ? String(cloudInp.value || "").trim() : "";
-    if (!g && !c) {{
-      readKeyHint(LANG === "vi" ? "Nhập ít nhất một khóa rồi Lưu." : "Paste at least one key, then Save.");
+    var keyInp = document.getElementById("readerAzureKeyInput");
+    var regInp = document.getElementById("readerAzureRegionInput");
+    var key = keyInp ? String(keyInp.value || "").trim() : "";
+    var reg = regInp ? String(regInp.value || "").trim() : "";
+    if (!key && !reg) {{
+      readKeyHint(LANG === "vi" ? "Nhập khóa + vùng rồi Lưu." : "Enter key + region, then Save.");
       return false;
     }}
     try {{
-      if (g) sessionStorage.setItem(KEY_GEMINI, g);
-      if (c) sessionStorage.setItem(KEY_CLOUD_TTS, c);
+      if (key) localStorage.setItem(KEY_AZURE, key);
+      if (reg) localStorage.setItem(KEY_REGION, reg);
     }} catch (e) {{
-      readKeyHint(LANG === "vi" ? "Không lưu được (sessionStorage)." : "Could not save (sessionStorage).");
+      readKeyHint(LANG === "vi" ? "Không lưu được (localStorage)." : "Could not save (localStorage).");
       return false;
     }}
-    var hg = readStoredGeminiKey();
-    var hc = readStoredCloudTtsKey();
-    if (!hg || !hc) {{
+    var hk = readStored(KEY_AZURE);
+    var hr = readStored(KEY_REGION);
+    if (!hk || !hr) {{
       readKeyHint(
         LANG === "vi"
-          ? !hg
-            ? "Thiếu khóa Gemini — nhập và Lưu."
-            : "Thiếu khóa Cloud TTS — nhập và Lưu."
-          : !hg
-            ? "Missing Gemini API key — paste and Save keys."
-            : "Missing Cloud Text-to-Speech API key — paste and Save keys."
+          ? (!hk ? "Thiếu khóa Azure — nhập và Lưu." : "Thiếu vùng — nhập và Lưu.")
+          : (!hk ? "Missing Azure key — enter and Save." : "Missing region — enter and Save.")
       );
     }} else {{
-      readKeyHint(LANG === "vi" ? "Đã lưu cho phiên tab (Gemini + Cloud)." : "Keys saved for this tab (Gemini + Cloud).");
+      readKeyHint(LANG === "vi" ? "Đã lưu trên trình duyệt này." : "Saved on this browser.");
     }}
-    if (gemInp && g) gemInp.value = "";
-    if (cloudInp && c) cloudInp.value = "";
+    if (keyInp && key) keyInp.value = "";
     return true;
   }}
-
-  function getGeminiKeyForRead() {{
-    var stored = readStoredGeminiKey();
-    if (stored) return stored;
-    var inp = document.getElementById("readerApiKeyInput");
-    return inp ? String(inp.value || "").trim() : "";
-  }}
-
-  function getCloudTtsKeyForRead() {{
-    var stored = readStoredCloudTtsKey();
-    if (stored) return stored;
-    var inp = document.getElementById("readerCloudTtsKeyInput");
-    return inp ? String(inp.value || "").trim() : "";
-  }}
-
   function syncKeyHintOnLoad() {{
-    var g = readStoredGeminiKey();
-    var c = readStoredCloudTtsKey();
-    if (g || c) {{
-      readKeyHint(
-        LANG === "vi"
-          ? (g && c ? "Đã có khóa Gemini + Cloud trong phiên." : "Đã có một phần khóa; hãy nhập và Lưu nếu thiếu.")
-          : g && c
-            ? "Keys saved for this tab."
-            : "Partial keys in session; paste missing keys and Save keys."
-      );
-    }}
-  }}
-
-  function saveReaderApiKeyClick() {{
-    persistReaderKeys();
+    var regInp = document.getElementById("readerAzureRegionInput");
+    var storedReg = readStored(KEY_REGION) || DEFAULT_REGION;
+    if (regInp && storedReg && !regInp.value) regInp.value = storedReg;
+    var k = readStored(KEY_AZURE);
+    if (k) readKeyHint(LANG === "vi" ? "Đã lưu khóa Azure trên trình duyệt này." : "Azure key saved on this browser.");
   }}
 
   function visibleCards() {{
     return Array.prototype.slice.call(document.querySelectorAll("article.card")).filter(function(c) {{ return !c.hidden; }});
   }}
-
-  function cardPayload(card) {{
+  function cardText(card) {{
     var ta = card.querySelector(".topic a");
     var title = ta ? ta.textContent.trim() : "";
     var blocks = card.querySelectorAll(".block p");
     var chunks = [];
     for (var i = 0; i < blocks.length; i++) chunks.push(blocks[i].textContent.trim());
-    return {{ title: title, text: chunks.join(" ") }};
+    return (title ? title + ". " : "") + chunks.join(" ");
   }}
 
-  function extractText(data) {{
-    try {{
-      var parts = data.candidates[0].content.parts;
-      return parts.map(function(p) {{ return p.text || ""; }}).join("");
-    }} catch (e) {{
-      return "";
-    }}
-  }}
-
-  function stripJsonFence(s) {{
-    s = (s || "").trim();
-    if (s.indexOf("```") === 0) {{
-      s = s.replace(/^```[a-zA-Z]*\\n?/, "").replace(/```\\s*$/, "").trim();
-    }}
-    return s;
-  }}
-
-  function parseReaderJson(raw) {{
-    var t = stripJsonFence(raw);
-    var arr = JSON.parse(t);
-    if (!Array.isArray(arr)) throw new Error("Summary model did not return a JSON array.");
-    return arr.map(function(x) {{ return String(x || "").trim(); }}).filter(Boolean);
-  }}
-
-  function buildSummaryPrompt(batch) {{
-    if (LANG === "vi") {{
-      return (
-        "Bạn là biên tập phát thanh. Nhận mảng JSON các bài (title, text). "
-        + "Trả về DUY NHẤT một mảng JSON các chuỗi, cùng độ dài và thứ tự. Mỗi chuỗi là 2–4 câu tiếng Việt, tông đọc báo trung lập, sẵn sàng chuyển thành giọng nói; không markdown; escape JSON đúng chuẩn.\\n\\n"
-        + "INPUT_JSON:\\n"
-        + JSON.stringify(batch)
-      );
-    }}
-    return (
-      "You are a broadcast editor. Input is a JSON array of items with title and text. "
-      + "Return ONLY a JSON array of strings, same length and order. Each string is 2–4 sentences, neutral newsreader tone, suitable for speech synthesis; no markdown; valid JSON escaping.\\n\\n"
-      + "INPUT_JSON:\\n"
-      + JSON.stringify(batch)
-    );
-  }}
-
-  async function callGenerateTextWithFallback(apiKey, userText) {{
-    try {{
-      return await callGenerateText(apiKey, SUMMARY_MODEL, userText);
-    }} catch (e1) {{
-      if (!SUMMARY_FALLBACK || SUMMARY_FALLBACK === SUMMARY_MODEL) throw e1;
-      console.warn("Read-news summary: primary model failed, trying fallback", e1);
-      return await callGenerateText(apiKey, SUMMARY_FALLBACK, userText);
-    }}
-  }}
-
-  async function callGenerateText(apiKey, modelId, userText) {{
-    var url = API_BASE + encodeURIComponent(modelId) + ":generateContent?key=" + encodeURIComponent(apiKey);
-    var body = {{
-      contents: [{{ role: "user", parts: [{{ text: userText }}] }}],
-      generationConfig: {{ temperature: 0.35, maxOutputTokens: 8192 }},
-    }};
-    var res = await fetch(url, {{
-      method: "POST",
-      headers: {{ "Content-Type": "application/json" }},
-      body: JSON.stringify(body),
-    }});
-    var raw = await res.text();
-    if (!res.ok) throw new Error(raw || res.statusText);
-    return JSON.parse(raw);
-  }}
-
-  function b64ToBytes(b64) {{
-    var bin = atob(b64);
-    var u = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-    return u;
-  }}
-
-  function pcm16MonoToWav(pcmBytes, sampleRate) {{
-    var numChannels = 1;
-    var bitsPerSample = 16;
-    var blockAlign = numChannels * bitsPerSample / 8;
-    var byteRate = sampleRate * blockAlign;
-    var dataSize = pcmBytes.byteLength;
-    var out = new ArrayBuffer(44 + dataSize);
-    var view = new DataView(out);
-    function wstr(off, s) {{
-      for (var j = 0; j < s.length; j++) view.setUint8(off + j, s.charCodeAt(j));
-    }}
-    wstr(0, "RIFF");
-    view.setUint32(4, 36 + dataSize, true);
-    wstr(8, "WAVE");
-    wstr(12, "fmt ");
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, numChannels, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, byteRate, true);
-    view.setUint16(32, blockAlign, true);
-    view.setUint16(34, bitsPerSample, true);
-    wstr(36, "data");
-    view.setUint32(40, dataSize, true);
-    new Uint8Array(out, 44).set(pcmBytes);
-    return out;
-  }}
-
-  function voiceLanguagePrefix(voiceId, fallbackLocale) {{
-    var v = String(voiceId || "").trim();
-    if (/^[a-z]{{2}}-[A-Z]{{2}}-/.test(v)) return v.slice(0, 5);
-    return fallbackLocale;
-  }}
-
-  function localeFallback() {{
-    return LANG === "vi" ? "vi-VN" : "en-US";
-  }}
-
-  function truncateCloudTts(text) {{
-    text = String(text || "");
-    if (text.length <= CLOUD_TTS_MAX_CHARS) return text;
-    return text.slice(0, CLOUD_TTS_MAX_CHARS - 1).replace(/\\s+\\S*$/, "") + "…";
-  }}
-
-  async function callCloudTtsWithVoice(apiKey, plainText, voiceId) {{
-    var lc = voiceLanguagePrefix(voiceId, localeFallback());
-    var vid = String(voiceId || "").trim() || CLOUD_VOICE;
-    var url = CLOUD_TTS_URL + "?key=" + encodeURIComponent(apiKey);
-    var body = {{
-      input: {{ text: truncateCloudTts(plainText) }},
-      voice: {{ languageCode: lc, name: vid }},
-      audioConfig: {{
-        audioEncoding: "LINEAR16",
-        sampleRateHertz: CLOUD_TTS_SAMPLE_HZ,
-      }},
-    }};
-    var res = await fetch(url, {{
-      method: "POST",
-      headers: {{ "Content-Type": "application/json" }},
-      body: JSON.stringify(body),
-    }});
-    var raw = await res.text();
-    if (!res.ok) throw new Error(raw || res.statusText);
-    var data = JSON.parse(raw);
-    var b64 = data.audioContent;
-    if (!b64) throw new Error("Cloud TTS response missing audioContent.");
-    var pcm = b64ToBytes(b64);
-    return pcm16MonoToWav(pcm, CLOUD_TTS_SAMPLE_HZ);
-  }}
-
-  async function callTts(cloudApiKey, plainText) {{
-    try {{
-      return await callCloudTtsWithVoice(cloudApiKey, plainText, CLOUD_VOICE);
-    }} catch (e1) {{
-      if (!CLOUD_VOICE_FALLBACK || CLOUD_VOICE_FALLBACK === CLOUD_VOICE) throw e1;
-      console.warn("Read-news Cloud TTS: primary voice failed, trying fallback", e1);
-      return await callCloudTtsWithVoice(cloudApiKey, plainText, CLOUD_VOICE_FALLBACK);
-    }}
-  }}
-
-  function playWavBuffer(buf) {{
+  function synthOnce(key, region, text, voiceId) {{
     return new Promise(function(resolve, reject) {{
-      if (readAborted) {{
-        resolve();
-        return;
-      }}
-      var blob = new Blob([buf], {{ type: "audio/wav" }});
+      var SDK = window.SpeechSDK;
+      if (!SDK) {{ reject(new Error(LANG === "vi" ? "Chưa tải được Azure Speech SDK." : "Azure Speech SDK failed to load.")); return; }}
+      var cfg;
+      try {{
+        cfg = SDK.SpeechConfig.fromSubscription(key, region);
+        cfg.speechSynthesisVoiceName = voiceId;
+        cfg.speechSynthesisOutputFormat = SDK.SpeechSynthesisOutputFormat.Audio24Khz48KBitRateMonoMp3;
+      }} catch (e) {{ reject(e); return; }}
+      var synth = new SDK.SpeechSynthesizer(cfg, null);
+      synth.speakTextAsync(
+        text,
+        function(result) {{
+          try {{
+            if (result.reason === SDK.ResultReason.SynthesizingAudioCompleted) {{
+              resolve(result.audioData);
+            }} else {{
+              reject(new Error(result.errorDetails || ("TTS failed: " + result.reason)));
+            }}
+          }} finally {{ synth.close(); }}
+        }},
+        function(err) {{ try {{ synth.close(); }} catch (e) {{}} reject(new Error(String(err))); }}
+      );
+    }});
+  }}
+  async function synth(key, region, text) {{
+    try {{
+      return await synthOnce(key, region, text, VOICE);
+    }} catch (e1) {{
+      if (!VOICE_FALLBACK || VOICE_FALLBACK === VOICE) throw e1;
+      console.warn("Reader TTS: primary voice failed, trying fallback", e1);
+      return await synthOnce(key, region, text, VOICE_FALLBACK);
+    }}
+  }}
+
+  function playMp3Buffer(buf) {{
+    return new Promise(function(resolve, reject) {{
+      if (readAborted) {{ resolve(); return; }}
+      var blob = new Blob([buf], {{ type: "audio/mpeg" }});
       var url = URL.createObjectURL(blob);
       var audio = new Audio(url);
       currentAudio = audio;
-      try {{
-        audio.playbackRate = getSpeechRate();
-      }} catch (e) {{}}
-      audio.onended = function() {{
-        URL.revokeObjectURL(url);
-        currentAudio = null;
-        resolve();
-      }};
-      audio.onerror = function() {{
-        URL.revokeObjectURL(url);
-        currentAudio = null;
-        reject(new Error("Audio playback failed."));
-      }};
-      audio.play().catch(function(e) {{
-        URL.revokeObjectURL(url);
-        currentAudio = null;
-        reject(e);
-      }});
+      try {{ audio.playbackRate = getSpeechRate(); }} catch (e) {{}}
+      audio.onended = function() {{ URL.revokeObjectURL(url); currentAudio = null; resolve(); }};
+      audio.onerror = function() {{ URL.revokeObjectURL(url); currentAudio = null; reject(new Error("Audio playback failed.")); }};
+      audio.play().catch(function(e) {{ URL.revokeObjectURL(url); currentAudio = null; reject(e); }});
     }});
   }}
 
@@ -531,28 +340,17 @@ def digest_reader_script(
       status(LANG === "vi" ? "Không có bài đang hiển thị." : "No articles visible.", true);
       return;
     }}
-    var geminiKey = getGeminiKeyForRead();
-    var cloudKey = getCloudTtsKeyForRead();
-    if (!geminiKey) {{
+    var key = getAzureKey();
+    var region = getAzureRegion();
+    if (!key || !region) {{
       status(
         LANG === "vi"
-          ? "Nhập và lưu API key Gemini (Google AI Studio) để tóm tắt."
-          : "Enter and save your Gemini (Google AI Studio) API key for summaries.",
+          ? "Nhập và lưu khóa Azure Speech + vùng để đọc."
+          : "Enter and save an Azure Speech key + region to read.",
         true
       );
-      var inp = document.getElementById("readerApiKeyInput");
-      if (inp) inp.focus();
-      return;
-    }}
-    if (!cloudKey) {{
-      status(
-        LANG === "vi"
-          ? "Nhập và lưu API key Google Cloud (đã bật Text-to-Speech) để đọc."
-          : "Enter and save a Google Cloud API key with Text-to-Speech API enabled.",
-        true
-      );
-      var cIn = document.getElementById("readerCloudTtsKeyInput");
-      if (cIn) cIn.focus();
+      var f = document.getElementById(key ? "readerAzureRegionInput" : "readerAzureKeyInput");
+      if (f) f.focus();
       return;
     }}
 
@@ -560,101 +358,19 @@ def digest_reader_script(
     var stopBtn = document.getElementById("stopRead");
     if (readBtn) readBtn.disabled = true;
     if (stopBtn) stopBtn.disabled = false;
-    if (currentAudio) {{
-      try {{ currentAudio.pause(); }} catch (e) {{}}
-      currentAudio = null;
-    }}
+    if (currentAudio) {{ try {{ currentAudio.pause(); }} catch (e) {{}} currentAudio = null; }}
 
-    var payloads = cards.map(cardPayload);
-    var chunkSize = 8;
-    var speakLines = [];
-    var speakWaiters = [];
-    var summaryFinished = false;
-    var summaryFailed = null;
-
-    function notifySpeakWaiters() {{
-      var w = speakWaiters.slice();
-      speakWaiters.length = 0;
-      for (var wi = 0; wi < w.length; wi++) {{
-        try {{
-          w[wi]();
-        }} catch (e) {{}}
-      }}
-    }}
-
-    function appendSpeakLine(line) {{
-      var t = String(line || "").trim();
-      if (!t) return;
-      speakLines.push(t);
-      notifySpeakWaiters();
-    }}
-
-    async function waitSpeakLine(index) {{
-      while (true) {{
-        if (summaryFailed) throw summaryFailed;
-        if (speakLines.length > index) return speakLines[index];
-        if (summaryFinished && speakLines.length <= index) return null;
-        await new Promise(function(resolve) {{
-          speakWaiters.push(resolve);
-        }});
-      }}
-    }}
-
-    async function summarizeTask() {{
-      try {{
-        for (var c = 0; c < payloads.length; c += chunkSize) {{
-          if (readAborted) break;
-          var batch = payloads.slice(c, c + chunkSize);
-          status(
-            (LANG === "vi" ? "Đang soạn lời (Gemini)… " : "Summarizing for speech (Gemini)… ") +
-              (c + 1) +
-              "–" +
-              Math.min(c + batch.length, payloads.length) +
-              "/" +
-              payloads.length
-          );
-          var data = await callGenerateTextWithFallback(geminiKey, buildSummaryPrompt(batch));
-          var out = extractText(data);
-          var part = parseReaderJson(out);
-          if (part.length !== batch.length) {{
-            console.warn("Summary length mismatch", part.length, batch.length);
-          }}
-          for (var i = 0; i < batch.length; i++) {{
-            var line = (part[i] || batch[i].title + ". " + batch[i].text).trim();
-            appendSpeakLine(line);
-          }}
-        }}
-      }} catch (e) {{
-        summaryFailed = e;
-      }} finally {{
-        summaryFinished = true;
-        notifySpeakWaiters();
-      }}
-    }}
-
-    async function speakTask() {{
-      var line0 = await waitSpeakLine(0);
-      if (!line0 || readAborted) return;
-      var prefetch = callTts(cloudKey, line0);
-      for (var j = 0; ; j++) {{
-        if (readAborted) break;
-        status((LANG === "vi" ? "Đang tạo giọng (Cloud TTS)… " : "Synthesizing speech (Google Cloud TTS)… ") + (j + 1));
-        var wav = await prefetch;
-        if (readAborted) break;
-        var nextLine = await waitSpeakLine(j + 1);
-        if (nextLine) {{
-          prefetch = callTts(cloudKey, nextLine);
-        }} else {{
-          prefetch = Promise.resolve(null);
-        }}
-        await playWavBuffer(wav);
-        if (!nextLine) break;
-      }}
-    }}
-
+    var texts = cards.map(cardText).filter(function(t) {{ return t && t.trim(); }});
     try {{
-      await Promise.all([summarizeTask(), speakTask()]);
-      if (summaryFailed) throw summaryFailed;
+      var prefetch = synth(key, region, texts[0]);
+      for (var j = 0; j < texts.length; j++) {{
+        if (readAborted) break;
+        status((LANG === "vi" ? "Đang tạo giọng (Azure)… " : "Synthesizing speech (Azure)… ") + (j + 1) + "/" + texts.length);
+        var buf = await prefetch;
+        if (readAborted) break;
+        if (j + 1 < texts.length) prefetch = synth(key, region, texts[j + 1]);
+        await playMp3Buffer(buf);
+      }}
     }} catch (e) {{
       status(String(e && e.message ? e.message : e), true);
       if (readBtn) readBtn.disabled = false;
@@ -664,12 +380,9 @@ def digest_reader_script(
 
     if (readAborted) {{
       status(LANG === "vi" ? "Đã hủy." : "Cancelled.", false);
-      if (readBtn) readBtn.disabled = false;
-      if (stopBtn) stopBtn.disabled = true;
-      return;
+    }} else {{
+      status(LANG === "vi" ? "Đã đọc xong." : "Finished reading.", false);
     }}
-
-    status(LANG === "vi" ? "Đã đọc xong." : "Finished reading.", false);
     if (readBtn) readBtn.disabled = false;
     if (stopBtn) stopBtn.disabled = true;
   }}
@@ -677,11 +390,7 @@ def digest_reader_script(
   function stopRead() {{
     readAborted = true;
     if (currentAudio) {{
-      try {{
-        currentAudio.pause();
-        currentAudio.removeAttribute("src");
-        currentAudio.load();
-      }} catch (e) {{}}
+      try {{ currentAudio.pause(); currentAudio.removeAttribute("src"); currentAudio.load(); }} catch (e) {{}}
       currentAudio = null;
     }}
     status(LANG === "vi" ? "Đã dừng." : "Stopped.", false);
@@ -694,27 +403,17 @@ def digest_reader_script(
   var r = document.getElementById("readNews");
   var s = document.getElementById("stopRead");
   var saveBtn = document.getElementById("saveReaderApiKey");
-  var gemInp = document.getElementById("readerApiKeyInput");
-  var cloudInp = document.getElementById("readerCloudTtsKeyInput");
+  var keyInp = document.getElementById("readerAzureKeyInput");
+  var regInp = document.getElementById("readerAzureRegionInput");
   if (r) r.addEventListener("click", function() {{ runRead().catch(function(e) {{ status(String(e), true); }}); }});
   if (s) s.addEventListener("click", stopRead);
-  if (saveBtn) saveBtn.addEventListener("click", saveReaderApiKeyClick);
-  if (gemInp) {{
-    gemInp.addEventListener("keydown", function(ev) {{
-      if (ev.key === "Enter") {{
-        ev.preventDefault();
-        saveReaderApiKeyClick();
-      }}
-    }});
+  if (saveBtn) saveBtn.addEventListener("click", persistReaderKeys);
+  function onEnter(el) {{
+    if (!el) return;
+    el.addEventListener("keydown", function(ev) {{ if (ev.key === "Enter") {{ ev.preventDefault(); persistReaderKeys(); }} }});
   }}
-  if (cloudInp) {{
-    cloudInp.addEventListener("keydown", function(ev) {{
-      if (ev.key === "Enter") {{
-        ev.preventDefault();
-        saveReaderApiKeyClick();
-      }}
-    }});
-  }}
+  onEnter(keyInp);
+  onEnter(regInp);
   var spdDn = document.getElementById("readerSpeedDown");
   var spdUp = document.getElementById("readerSpeedUp");
   if (spdDn) spdDn.addEventListener("click", function() {{ bumpSpeechRate(-RATE_STEP); }});
