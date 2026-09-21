@@ -527,6 +527,7 @@ def groq_batch_enrich(
                         max_tokens=tokens_this_chunk,
                         temperature=0.35,
                         timeout_s=request_timeout_s,
+                        reasoning_effort="low",
                     )
                     if not raw_text:
                         raise RuntimeError("Groq returned empty text.")
@@ -1052,8 +1053,8 @@ def main() -> int:
     parser.add_argument(
         "--gemini-max-output-tokens",
         type=int,
-        default=1024,
-        help="Max output tokens per chunk response.",
+        default=2048,
+        help="Max output tokens per chunk response (covers gpt-oss reasoning + the JSON).",
     )
     parser.add_argument(
         "--summary-tpm",

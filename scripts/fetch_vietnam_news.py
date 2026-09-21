@@ -683,6 +683,7 @@ def groq_vietnam_enrich(
                         max_tokens=tokens_this_chunk,
                         temperature=0.35,
                         timeout_s=request_timeout_s,
+                        reasoning_effort="low",
                     )
                     if not raw_text:
                         raise RuntimeError("Groq returned empty text.")
@@ -1027,7 +1028,7 @@ def main() -> int:
     parser.add_argument("--gemini-article-max-bytes", type=int, default=2_500_000, metavar="N", help="Giới hạn bytes HTML mỗi bài.")
     parser.add_argument("--gemini-article-fetch-pause", type=float, default=0.35, help="Giây nghỉ giữa các lần tải trang (lịch sự).")
     parser.add_argument("--gemini-max-article-chars", type=int, default=6_000, help="Tối đa ký tự plain text/bài gửi model (còn bị cắt thêm để vừa --summary-tpm).")
-    parser.add_argument("--gemini-max-output-tokens", type=int, default=1024)
+    parser.add_argument("--gemini-max-output-tokens", type=int, default=2048)
     parser.add_argument("--summary-tpm", type=int, default=groq.DEFAULT_TPM_LIMIT, metavar="N", help=f"Giới hạn tokens/phút của gói Groq (mặc định {groq.DEFAULT_TPM_LIMIT}, gói free). Input mỗi request bị cắt để không vượt.")
     parser.add_argument("--gemini-timeout", type=int, default=180)
     parser.add_argument("--gemini-chunk-size", type=int, default=3)

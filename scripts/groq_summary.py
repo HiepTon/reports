@@ -34,8 +34,9 @@ _CHARS_PER_TOKEN = 2.0  # conservative (low) so estimates run high and we stay u
 
 
 def output_token_budget(n_items: int, max_output_tokens: int) -> int:
-    """Reserve a small output budget proportional to article count (each summary is short)."""
-    return max(256, min(max_output_tokens, 256 + 240 * max(1, n_items)))
+    """Output budget proportional to article count. Must cover the JSON summaries AND the
+    hidden reasoning tokens gpt-oss models emit first, or the JSON gets truncated mid-string."""
+    return max(512, min(max_output_tokens, 400 + 450 * max(1, n_items)))
 
 
 def input_char_budget_per_item(
@@ -93,15 +94,25 @@ def chat_text(
     temperature: float = 0.35,
     timeout_s: int = 60,
     system: str | None = None,
+    reasoning_effort: str | None = None,
+    json_object: bool = False,
 ) -> str:
-    """POST a single-turn chat completion and return the assistant message text."""
+    """POST a single-turn chat completion and return the assistant message text.
+
+    reasoning_effort ("low"/"medium"/"high"): for gpt-oss reasoning models, "low" keeps
+    reasoning from eating the output-token budget and truncating the JSON. json_object asks
+    the API to constrain output to a JSON object (the prompt must still describe the shape).
+    """
     messages: list[dict] = []
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
-    payload = json.dumps(
-        {"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
-    ).encode("utf-8")
+    body: dict = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
+    if reasoning_effort:
+        body["reasoning_effort"] = reasoning_effort
+    if json_object:
+        body["response_format"] = {"type": "json_object"}
+    payload = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(
         GROQ_ENDPOINT,
         data=payload,
