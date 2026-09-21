@@ -172,16 +172,38 @@ def _normalize_nonstandard_gmt_offset(s: str) -> str:
     return s
 
 
+# Tuổi Trẻ home.rss emits US-style local timestamps, e.g. "9/21/2026 2:15:00 PM"
+# (M/D/YYYY, 12-hour, no timezone). These are Vietnam local time (UTC+7).
+_VN_TZ = timezone(timedelta(hours=7))
+_MDY_12H_FORMATS = ("%m/%d/%Y %I:%M:%S %p", "%m/%d/%Y %I:%M %p")
+
+
+def _parse_mdy_12h_local(s: str) -> datetime | None:
+    """Parse "M/D/YYYY h:mm:ss AM/PM" (Tuổi Trẻ home.rss) as Vietnam local time -> UTC."""
+    for fmt in _MDY_12H_FORMATS:
+        try:
+            dt = datetime.strptime(s, fmt).replace(tzinfo=_VN_TZ)
+        except ValueError:
+            continue
+        return dt.astimezone(timezone.utc)
+    return None
+
+
 def parse_loose_rss_datetime(raw: str) -> datetime | None:
-    """Parse published/updated strings when feedparser leaves *_parsed empty (e.g. Tuổi Trẻ GMT+7)."""
+    """Parse published/updated strings when feedparser leaves *_parsed empty (e.g. Tuổi Trẻ)."""
     s = (raw or "").strip()
     if not s:
         return None
+    # Normalize narrow/no-break spaces that some feeds put before AM/PM.
+    s = s.replace(" ", " ").replace("\xa0", " ")
+    s = re.sub(r"\s+", " ", s)
     s = _normalize_nonstandard_gmt_offset(s)
     try:
         dt = email.utils.parsedate_to_datetime(s)
     except (TypeError, ValueError):
-        return None
+        dt = None
+    if dt is None:
+        return _parse_mdy_12h_local(s)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
