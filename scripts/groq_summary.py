@@ -19,6 +19,13 @@ GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
 SUMMARY_MODEL_DEFAULT = "openai/gpt-oss-120b"
 SUMMARY_MODEL_FALLBACK_DEFAULT = "openai/gpt-oss-20b"
 
+# api.groq.com sits behind Cloudflare, which returns "Error 1010: browser_signature_banned"
+# for the default urllib User-Agent (Python-urllib/x.y). Send a normal browser UA instead.
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+)
+
 
 class GroqError(RuntimeError):
     """Carries the HTTP status (when known) so callers can detect retryable errors."""
@@ -76,6 +83,7 @@ def chat_text(
             "Content-Type": "application/json",
             "Accept": "application/json",
             "Authorization": f"Bearer {token}",
+            "User-Agent": USER_AGENT,
         },
         method="POST",
     )
