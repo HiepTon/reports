@@ -92,6 +92,7 @@ class VietnamNewsItem:
     category: str
     link: str
     published: str | None
+    summarized: bool = False  # True once an LLM summary replaced the RSS description
 
 
 def default_feeds_config_path() -> Path:
@@ -701,7 +702,7 @@ def groq_vietnam_enrich(
                         cat = _normalize_category(str(row.get("category") or ""))
                         if not summary:
                             continue
-                        out[i] = replace(out[i], summary=summary[:4000], category=cat)
+                        out[i] = replace(out[i], summary=summary[:4000], category=cat, summarized=True)
                     chunk_ok = True
                     if mi > 0:
                         used_fallback = True
@@ -772,15 +773,18 @@ def _vietnam_card_html(it: VietnamNewsItem) -> str:
     dt = parse_item_datetime(it)
     data_ts = f' data-ts="{int(dt.timestamp() * 1000)}"' if dt else ""
     top_cls = " card-top" if _is_tuoitre_top_item(it) else ""
+    nosum_badge = "" if it.summarized else '<span class="badge badge-nosum" title="Chưa tóm tắt bằng AI; đang hiển thị mô tả RSS.">Chưa tóm tắt</span>'
+    sum_heading = "Tóm tắt" if it.summarized else "Mô tả (RSS)"
     return (
         f"""<article class="card{top_cls}" data-category="{slug}"{data_ts}>
   <header class="card-head">
     <span class="badge">{cat}</span>
+    {nosum_badge}
     <span class="src">{src}</span>
     <time{time_attr}>{pub}</time>
   </header>
   <h2 class="topic"><a href="{link_href}" rel="noopener noreferrer">{topic}</a></h2>
-  <section class="block"><h3>Tóm tắt</h3><p>{summary}</p></section>
+  <section class="block"><h3>{sum_heading}</h3><p>{summary}</p></section>
   <p class="linkrow"><a class="full" href="{link_href}" rel="noopener noreferrer">{link_text}</a></p>
 </article>"""
     )
@@ -889,6 +893,7 @@ def build_html(
       font-size: 0.82rem; color: var(--muted); margin-bottom: 0.35rem; }}
     .badge {{ background: var(--badge); color: #dfffea; padding: 0.15rem 0.5rem; border-radius: 6px;
       font-weight: 650; font-size: 0.78rem; }}
+    .badge-nosum {{ background: transparent; color: #d8a24a; border: 1px solid #6b562f; font-weight: 600; }}
     .src {{ font-weight: 600; color: var(--accent); margin-left: auto; }}
     .topic {{ font-size: 1.08rem; margin: 0.35rem 0 0.75rem; line-height: 1.35; }}
     .topic a {{ color: var(--text); text-decoration: none; }}

@@ -95,6 +95,7 @@ class NewsItem:
     analysis: str
     link: str
     published: str | None
+    summarized: bool = False  # True once an LLM summary+analysis replaced the RSS heuristics
 
 
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -340,6 +341,7 @@ def _apply_gemini_rows(
             out[i],
             summary=summary[:4000],
             analysis=analysis[:4000],
+            summarized=True,
         )
 
 
@@ -771,14 +773,17 @@ def build_html(
         data_ts = f' data-ts="{int(dt.timestamp() * 1000)}"' if dt else ""
         li_url = linkedin_share_url(it.link)
         li_href = html_module.escape(li_url, quote=True)
+        nosum_badge = "" if it.summarized else '<span class="badge-nosum" title="Not AI-summarized; showing the RSS description + heuristics.">Not summarized</span>'
+        sum_heading = "Summary" if it.summarized else "Description (RSS)"
         cards.append(
             f"""<article class="card"{data_ts}>
   <header class="card-head">
     <span class="src">{src}</span>
+    {nosum_badge}
     <time{time_attr}>{pub}</time>
   </header>
   <h2 class="topic"><a href="{link_href}" rel="noopener noreferrer">{topic}</a></h2>
-  <section class="block"><h3>Summary</h3><p>{summary}</p></section>
+  <section class="block"><h3>{sum_heading}</h3><p>{summary}</p></section>
   <section class="block analysis"><h3>Analysis</h3><p>{analysis}</p></section>
   <div class="actions">
     <a class="btn-li" href="{li_href}" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
@@ -845,6 +850,9 @@ def build_html(
     .card-head {{ display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; justify-content: space-between;
       align-items: baseline; font-size: 0.82rem; color: var(--muted); margin-bottom: 0.35rem; }}
     .src {{ font-weight: 600; color: var(--accent); }}
+    .card-head time {{ margin-left: auto; }}
+    .badge-nosum {{ background: transparent; color: #d8a24a; border: 1px solid #6b562f;
+      border-radius: 6px; padding: 0.1rem 0.45rem; font-weight: 600; font-size: 0.78rem; }}
     .topic {{ font-size: 1.1rem; margin: 0.2rem 0 0.75rem; line-height: 1.35; }}
     .topic a {{ color: var(--text); text-decoration: none; }}
     .topic a:hover {{ text-decoration: underline; color: var(--accent); }}

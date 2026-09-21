@@ -73,7 +73,7 @@ Default model is **`openai/gpt-oss-120b`** with fallback **`openai/gpt-oss-20b`*
 
 Tuning flags (historical `--gemini-*` names, provider-agnostic): **`--gemini-max-excerpt-chars`** (default 480), **`--gemini-max-output-tokens`**, **`--gemini-timeout`**, **`--gemini-chunk-size`** (use **0** for a single request containing every article—higher rate-limit risk on the free tier).
 
-If Groq errors or returns unusable JSON, the script **falls back** to RSS + heuristics and still writes HTML/JSON.
+If Groq errors or returns unusable JSON, the script **falls back** to RSS + heuristics and still writes HTML/JSON. Cards that were not AI-summarized (no key, or a per-item Groq failure) are flagged with a **“Not summarized”** badge and their heading reads **“Description (RSS)”** instead of “Summary”, so it’s clear which items show the raw RSS text. The item’s `summarized` boolean is also written to the JSON output.
 
 **GitHub Actions:** add a repository secret **`GROQ_API_KEY`**. The scheduled workflow passes **`--summarize` automatically when the secret is set**; if unset, the build uses RSS + heuristics only (no failure).
 
@@ -151,7 +151,7 @@ python scripts/fetch_vietnam_news.py --limit 15
 GROQ_API_KEY=... python scripts/fetch_vietnam_news.py --summarize --days 2 --html output/vietnam/index.html
 ```
 
-Without **`--summarize`**, the digest keeps the RSS blurb as summary and sets category **`Chưa phân loại`**. Summary flags mirror the security script (`--summary-model`, `--gemini-chunk-size`, etc.).
+Without **`--summarize`**, the digest keeps the RSS blurb as summary and sets category **`Chưa phân loại`**. Such cards are flagged with a **“Chưa tóm tắt”** badge and a **“Mô tả (RSS)”** heading (vs. “Tóm tắt” for AI-summarized ones). Summary flags mirror the security script (`--summary-model`, `--gemini-chunk-size`, etc.).
 
 ### GitHub Actions (daily 5:00 Vietnam)
 
