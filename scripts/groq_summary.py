@@ -27,6 +27,32 @@ USER_AGENT = (
 )
 
 
+# Groq free tier caps tokens-per-minute (TPM) per request+minute; gpt-oss on_demand is 8000.
+# A request whose (instructions + input + reserved output) tokens exceed this is rejected 413.
+DEFAULT_TPM_LIMIT = 8000
+_CHARS_PER_TOKEN = 2.0  # conservative (low) so estimates run high and we stay under the cap
+
+
+def output_token_budget(n_items: int, max_output_tokens: int) -> int:
+    """Reserve a small output budget proportional to article count (each summary is short)."""
+    return max(256, min(max_output_tokens, 256 + 240 * max(1, n_items)))
+
+
+def input_char_budget_per_item(
+    n_items: int,
+    *,
+    output_tokens: int,
+    tpm_limit: int = DEFAULT_TPM_LIMIT,
+    instructions_reserve_tokens: int = 600,
+    safety: float = 0.85,
+) -> int:
+    """Max chars per article so instructions + input + reserved output stay under the TPM cap."""
+    n = max(1, n_items)
+    budget_tokens = tpm_limit * safety - output_tokens - instructions_reserve_tokens
+    budget_tokens = max(budget_tokens, 400)
+    return max(300, int(budget_tokens * _CHARS_PER_TOKEN / n))
+
+
 class GroqError(RuntimeError):
     """Carries the HTTP status (when known) so callers can detect retryable errors."""
 

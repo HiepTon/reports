@@ -398,14 +398,12 @@ def _gemini_payload_rows(
     bodies: dict[int, str],
     *,
     full_article: bool,
-    max_article_chars: int,
-    max_excerpt_chars: int,
+    body_char_cap: int,
 ) -> list[dict]:
-    cap = max_article_chars if full_article else max_excerpt_chars
     payload: list[dict] = []
     for i in indices:
         it = out[i]
-        body = _truncate_for_gemini(bodies.get(i, it.summary), cap)
+        body = _truncate_for_gemini(bodies.get(i, it.summary), body_char_cap)
         row: dict = {
             "index": i,
             "link": it.link,
@@ -439,6 +437,7 @@ def groq_batch_enrich(
     chunk_size: int,
     chunk_pause_s: float,
     max_retries: int,
+    summary_tpm: int = groq.DEFAULT_TPM_LIMIT,
 ) -> tuple[list[NewsItem], bool]:
     """
     Rewrite summaries/analysis via Groq (OpenAI-compatible chat completions) using chunked
@@ -499,13 +498,18 @@ def groq_batch_enrich(
             )
         else:
             bodies = {i: out[i].summary for i in indices}
+        # Keep each request under the free-tier TPM: small output reservation + input trimmed to fit.
+        out_tokens = groq.output_token_budget(len(indices), max_output_tokens)
+        body_char_cap = min(
+            max_article_chars if full_article else max_excerpt_chars,
+            groq.input_char_budget_per_item(len(indices), output_tokens=out_tokens, tpm_limit=summary_tpm),
+        )
         payload = _gemini_payload_rows(
             out,
             indices,
             bodies,
             full_article=full_article,
-            max_article_chars=max_article_chars,
-            max_excerpt_chars=max_excerpt_chars,
+            body_char_cap=body_char_cap,
         )
         prompt = instructions + json.dumps(payload, ensure_ascii=False)
 
@@ -514,11 +518,7 @@ def groq_batch_enrich(
 
         for mi, active_model in enumerate(model_candidates):
             for attempt in range(max_retries):
-                approx_in = sum(len(bodies.get(i, "")) for i in indices)
-                tokens_this_chunk = min(
-                    max_output_tokens,
-                    max(2048, 450 * len(indices) + approx_in // 5),
-                )
+                tokens_this_chunk = out_tokens
                 try:
                     raw_text = groq.chat_text(
                         token=api_key,
@@ -1046,14 +1046,22 @@ def main() -> int:
     parser.add_argument(
         "--gemini-max-article-chars",
         type=int,
-        default=16_000,
-        help="Max plain-text chars per article (after HTML extract) sent to Gemini.",
+        default=6_000,
+        help="Max plain-text chars per article sent to the model (further trimmed to fit --summary-tpm).",
     )
     parser.add_argument(
         "--gemini-max-output-tokens",
         type=int,
-        default=8192,
-        help="Max output tokens per Gemini chunk response.",
+        default=1024,
+        help="Max output tokens per chunk response.",
+    )
+    parser.add_argument(
+        "--summary-tpm",
+        type=int,
+        default=groq.DEFAULT_TPM_LIMIT,
+        metavar="N",
+        help=f"Tokens-per-minute limit of your Groq tier (default {groq.DEFAULT_TPM_LIMIT}, free tier). "
+        "Each request's input is trimmed so it stays under this cap.",
     )
     parser.add_argument(
         "--gemini-timeout",
@@ -1064,15 +1072,15 @@ def main() -> int:
     parser.add_argument(
         "--gemini-chunk-size",
         type=int,
-        default=6,
+        default=3,
         metavar="N",
-        help="Articles per Gemini request (smaller reduces input-token bursts). Use 0 for one request for all.",
+        help="Articles per request (smaller reduces per-request tokens). Use 0 for one request for all.",
     )
     parser.add_argument(
         "--gemini-chunk-pause",
         type=float,
-        default=28.0,
-        help="Seconds to sleep between Gemini chunks (helps free-tier requests/minute).",
+        default=45.0,
+        help="Seconds to sleep between chunks (keeps cumulative tokens/minute under the free-tier TPM).",
     )
     parser.add_argument(
         "--gemini-retries",
@@ -1169,6 +1177,7 @@ def main() -> int:
                 chunk_size=args.gemini_chunk_size,
                 chunk_pause_s=args.gemini_chunk_pause,
                 max_retries=args.gemini_retries,
+                summary_tpm=args.summary_tpm,
             )
             summary_model_used = args.summary_model
             if summary_used_fallback:
