@@ -100,9 +100,10 @@ class NewsItem:
 
 _TAG_RE = re.compile(r"<[^>]+>")
 
+# Browser UA: some feeds (e.g. BleepingComputer) 403 a bot-identifying User-Agent.
 _DEFAULT_UA = (
-    "Mozilla/5.0 (compatible; reports-fetch_security_news/1.0; "
-    "+https://github.com/) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/128.0.0.0 Safari/537.36"
 )
 _ARTICLE_PAGE_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
