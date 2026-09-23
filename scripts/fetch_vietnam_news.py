@@ -940,7 +940,7 @@ def build_html(
 <body>
   <div class="wrap">
     <h1>Tin Việt Nam — tổng hợp RSS</h1>
-    <p class="meta">Cập nhật {html_module.escape(when)} · <span id="visibleCount">{len(items)}</span> bài<br/>
+    <p class="meta">Cập nhật {html_module.escape(when)} · <span id="visibleCount">{len(items)}</span> bài · <a class="full" href="../archive/">🕘 Lịch sử</a><br/>
     <span class="submeta">{html_module.escape(ai_note)}</span></p>
     <div class="toolbar">
       <label>Hiện bài trong

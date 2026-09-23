@@ -1,6 +1,13 @@
-# Vietnam RSS digest: Vietnamese summaries + categories (Gemini optional).
-# Also builds the security digest index so GitHub Pages gets output/index.html + output/vietnam/index.html.
-# Schedule: 22:00 UTC daily ≈ 05:00 next calendar day in Vietnam (ICT, UTC+7).
+# Vietnam RSS digest → GitHub Pages, with a browsable history archive.
+#
+# Builds ONLY the Vietnam page (vietnam/index.html) to keep each run's Groq token usage
+# separate. The published site (both digests + the dated snapshot archive) is stored on
+# the `gh-pages` branch: each run clones it into ./site, rebuilds its own page, saves a
+# dated copy under archive/vietnam/, rebuilds the archive index, commits the branch
+# (that's the history), then deploys ./site to Pages. Because ./site already holds the
+# Security page, nothing needs to restore it.
+#
+# Schedule: 21:00 UTC daily ≈ 04:00 next calendar day in Vietnam (ICT, UTC+7).
 # See README "Vietnam news digest" for timezone note.
 
 name: Vietnam news digest
@@ -15,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write   # push the built site + history to the gh-pages branch
   pages: write
   id-token: write
 
@@ -24,6 +31,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - name: Restore published site (gh-pages branch)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          if git clone --branch gh-pages "$REMOTE" site 2>/dev/null; then
+            echo "Cloned existing gh-pages."
+          else
+            echo "gh-pages does not exist yet; creating an empty site."
+            rm -rf site
+            git clone "$REMOTE" site
+            cd site
+            git checkout --orphan gh-pages
+            git rm -rf . >/dev/null 2>&1 || true
+          fi
 
       - uses: actions/setup-python@v6
         with:
@@ -38,7 +62,7 @@ jobs:
           pip install -r requirements-security-news.txt
           pip install -r requirements-vietnam-news.txt
 
-      - name: Build Vietnam digest (for /vietnam/)
+      - name: Build Vietnam digest (vietnam/index.html)
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
@@ -50,49 +74,48 @@ jobs:
           else
             echo "GROQ_API_KEY not set: RSS excerpts only, category 'Chưa phân loại'."
           fi
+          mkdir -p site/vietnam
           python scripts/fetch_vietnam_news.py \
             --days 1 \
             --per-source 20 \
             --limit 90 \
             --pause 0.3 \
-            --html output/vietnam/index.html \
+            --html site/vietnam/index.html \
             $SUMMARIZE_FLAG
 
-      - name: Build security digest (site root index for Pages)
-        env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      - name: Snapshot to archive and rebuild archive index
         run: |
           set -e
-          SUMMARIZE_FLAG=""
-          if [ -n "${GROQ_API_KEY:-}" ]; then
-            SUMMARIZE_FLAG="--summarize"
-            echo "GROQ_API_KEY set: enabling Groq (chunked summaries)."
-          else
-            echo "GROQ_API_KEY not set; using RSS + heuristic text only."
-          fi
-          python scripts/fetch_security_news.py \
-            --days 2 \
-            --per-source 25 \
-            --limit 80 \
-            --pause 0.35 \
-            --html output/index.html \
-            --gemini-chunk-size 3 \
-            --gemini-chunk-pause 45 \
-            $SUMMARIZE_FLAG
+          DATE="$(date -u +%F)"
+          mkdir -p site/archive/vietnam
+          cp site/vietnam/index.html "site/archive/vietnam/${DATE}.html"
+          python scripts/build_archive_index.py --archive-dir site/archive --out site/archive/index.html
+          touch site/.nojekyll
 
-      - name: Disable Jekyll (static HTML only)
-        run: touch output/.nojekyll
+      - name: Publish history to gh-pages
+        run: |
+          set -e
+          cd site
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore(site): vietnam digest $(date -u +%F)"
+            git push origin gh-pages
+          fi
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: output/
+          path: site/
 
       - name: Upload Vietnam HTML artifact
         uses: actions/upload-artifact@v7
         with:
           name: vietnam-news
-          path: output/vietnam/index.html
+          path: site/vietnam/index.html
           if-no-files-found: error
 
   deploy:

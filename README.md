@@ -158,7 +158,7 @@ Without **`--summarize`**, the digest keeps the RSS blurb as summary and sets ca
 Workflow: [`.github/workflows/vietnam-news-daily.yml`](.github/workflows/vietnam-news-daily.yml).
 
 - **Cron:** `0 22 * * *` **UTC** → **05:00** on the **next calendar day** in **Vietnam** (ICT, **UTC+7**). GitHub Actions cron is always UTC; [scheduled runs](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#schedule) may slip slightly.
-- **GitHub Pages:** the same deploy pattern as the security workflow: build **Vietnam** + **security** HTML into **`output/`**, then **deploy** to Pages. After the first run, open **Settings → Pages** (or the **`github-pages`** environment URL on the run) and use **`/vietnam/`** for the Vietnamese digest.
+- **GitHub Pages:** builds **only** the Vietnam HTML (`vietnam/index.html`) into the `gh-pages` working copy (which already holds the security page), saves a dated snapshot under `archive/vietnam/`, then **deploys** the whole site to Pages. After the first run, open **Settings → Pages** (or the **`github-pages`** environment URL on the run) and use **`/vietnam/`** for the Vietnamese digest.
 - **Artifact:** each run still uploads **`vietnam-news`** (zip with the Vietnam `index.html`) for offline download.
 
 ### Other scripts
@@ -190,7 +190,9 @@ Create the empty repository first in the GitHub UI (**New repository**), then ru
 
 ## GitHub Pages (public URL)
 
-The workflow [`.github/workflows/security-news-daily.yml`](.github/workflows/security-news-daily.yml) and [`.github/workflows/vietnam-news-daily.yml`](.github/workflows/vietnam-news-daily.yml) each build **both** digests (`output/index.html` and `output/vietnam/index.html`) then deploy the whole **`output/`** directory to **GitHub Pages** (they share the `pages` concurrency group so deploys do not overlap).
+The workflows [`.github/workflows/security-news-daily.yml`](.github/workflows/security-news-daily.yml) and [`.github/workflows/vietnam-news-daily.yml`](.github/workflows/vietnam-news-daily.yml) each build **only their own** digest — security → `index.html`, Vietnam → `vietnam/index.html` — to keep each run's Groq token usage separate.
+
+**Site storage + history (`gh-pages` branch):** the published site lives on the **`gh-pages`** branch, which each run clones into `./site`, updates with its own page, and pushes back — so the branch is a persistent store that also gives full **history** (every deploy is a commit). Each run additionally saves a dated snapshot under **`archive/<digest>/YYYY-MM-DD.html`** and rebuilds **`archive/index.html`**, so past digests stay browsable at `…/archive/` (linked as **🕘 History** from each page). The whole `./site` tree is then deployed to Pages via the Actions artifact (Pages **Source: GitHub Actions** — no branch-source setting needed). `main` stays **source-only** (generated HTML is git-ignored). The two workflows share the `pages` concurrency group so runs never overlap.
 
 ### One-time repository settings
 

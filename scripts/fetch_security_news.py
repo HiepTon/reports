@@ -903,7 +903,7 @@ def build_html(
 <body>
   <div class="wrap">
     <h1>Security news digest</h1>
-    <p class="meta">Generated {html_module.escape(when)} · <span id="visibleCount">{len(items)}</span> shown<br/>
+    <p class="meta">Generated {html_module.escape(when)} · <span id="visibleCount">{len(items)}</span> shown · <a class="full" href="archive/">🕘 History</a><br/>
     <span class="submeta">{summary_note_esc}</span></p>
     <div class="toolbar">
       <label>Show articles from last
