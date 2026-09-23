@@ -722,6 +722,14 @@ def groq_vietnam_enrich(
                     break
                 except Exception as exc:  # noqa: BLE001 — retry transient/JSON, else next model
                     last_err = exc
+                    if groq.is_daily_quota(exc):
+                        # Hạn mức token/ngày: chờ cũng vô ích. Bỏ retry, để vòng model thử fallback.
+                        print(
+                            f"Groq hết hạn mức ngày ở chunk {start}-{end - 1} (model {active_model!r}: {exc!s}); "
+                            "bỏ qua retry.",
+                            file=sys.stderr,
+                        )
+                        break
                     if groq.is_transient(exc) and attempt < max_retries - 1:
                         delay = groq.retry_sleep_seconds(exc, attempt)
                         print(
@@ -754,6 +762,15 @@ def groq_vietnam_enrich(
 
         if not chunk_ok:
             assert last_err is not None
+            if groq.is_daily_quota(last_err):
+                # Tất cả model đã hết hạn mức ngày — các chunk sau cũng sẽ lỗi.
+                # Giữ trích đoạn RSS cho phần còn lại thay vì làm hỏng cả bản build.
+                print(
+                    f"Groq hết hạn mức ngày ở chunk {start}-{end - 1}; giữ trích đoạn RSS "
+                    "cho các bài còn lại.",
+                    file=sys.stderr,
+                )
+                break
             raise last_err
 
         if end < n and chunk_pause_s > 0:

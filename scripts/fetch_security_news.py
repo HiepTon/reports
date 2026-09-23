@@ -557,6 +557,15 @@ def groq_batch_enrich(
                     break
                 except Exception as exc:  # noqa: BLE001 — retry transient, else fall through to next model
                     last_err = exc
+                    if groq.is_daily_quota(exc):
+                        # Daily token/request cap: sleeping won't refill it. Skip retries
+                        # and let the model loop try the fallback (separate daily budget).
+                        print(
+                            f"Groq daily quota hit on chunk {start}-{end - 1} with model {active_model!r} "
+                            f"({exc!s}); skipping retries.",
+                            file=sys.stderr,
+                        )
+                        break
                     if groq.is_transient(exc) and attempt < max_retries - 1:
                         delay = groq.retry_sleep_seconds(exc, attempt)
                         print(
@@ -580,6 +589,15 @@ def groq_batch_enrich(
 
         if not chunk_ok:
             assert last_err is not None
+            if groq.is_daily_quota(last_err):
+                # All models are out of daily budget — remaining chunks would fail too.
+                # Keep RSS excerpts for this and later chunks instead of crashing.
+                print(
+                    f"Groq daily quota exhausted at chunk {start}-{end - 1}; keeping RSS excerpts "
+                    "for the remaining articles.",
+                    file=sys.stderr,
+                )
+                break
             raise last_err
 
         if end < n and chunk_pause_s > 0:

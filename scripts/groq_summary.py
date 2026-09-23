@@ -68,8 +68,26 @@ def groq_api_key() -> str | None:
     return (os.environ.get("GROQ_API_KEY") or "").strip() or None
 
 
+def is_daily_quota(exc: BaseException) -> bool:
+    """A 429 that is a *daily* token/request cap (TPD/RPD).
+
+    Retrying within the same run is futile (the budget won't refill in minutes), so
+    callers should skip the backoff loop and fall through to the fallback model or
+    degrade to RSS excerpts instead of sleeping.
+    """
+    if getattr(exc, "status", None) != 429:
+        return False
+    msg = str(exc).lower()
+    return any(s in msg for s in ("per day", "tpd", "rpd", "tokens per day", "requests per day"))
+
+
 def is_transient(exc: BaseException) -> bool:
-    """429 (rate limit) and 5xx are worth a backoff/fallback retry."""
+    """429 (rate limit) and 5xx are worth a backoff/fallback retry.
+
+    A daily-cap 429 (see is_daily_quota) is NOT transient — retrying can't help.
+    """
+    if is_daily_quota(exc):
+        return False
     status = getattr(exc, "status", None)
     if status == 429:
         return True
