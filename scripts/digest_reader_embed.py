@@ -17,13 +17,35 @@ READ_NEWS_AZURE_VOICE_VI_DEFAULT = "vi-VN-HoaiMyNeural"
 READ_NEWS_AZURE_VOICE_FALLBACK_EN_DEFAULT = "en-US-JennyNeural"
 READ_NEWS_AZURE_VOICE_FALLBACK_VI_DEFAULT = "vi-VN-NamMinhNeural"
 
-# Official browser bundle (redirects to the Azure CDN); self-hosted page has no CSP.
-AZURE_SPEECH_SDK_URL = "https://aka.ms/csspeech/jsbrowserpackageraw"
+# Pinned official browser bundle on jsdelivr (a public CDN). We prefer this over
+# the aka.ms redirector because some browsers' built-in ad/tracker blockers and
+# VPNs (notably Opera) block aka.ms and Microsoft CDN hosts, which left
+# window.SpeechSDK undefined. aka.ms is kept as a runtime fallback.
+AZURE_SPEECH_SDK_URL = (
+    "https://cdn.jsdelivr.net/npm/microsoft-cognitiveservices-speech-sdk@1.51.0"
+    "/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle-min.js"
+)
+AZURE_SPEECH_SDK_URL_FALLBACK = "https://aka.ms/csspeech/jsbrowserpackageraw"
 
 
 def digest_reader_sdk_script_tag() -> str:
-    """The <script> tag that loads the Azure Speech SDK browser bundle (window.SpeechSDK)."""
-    return f'<script src="{AZURE_SPEECH_SDK_URL}"></script>'
+    """<script> tags that load the Azure Speech SDK browser bundle (window.SpeechSDK).
+
+    If the primary CDN is blocked, the onerror handler injects the aka.ms
+    redirector as a fallback so window.SpeechSDK can still be defined. If that
+    also fails we set window.__readerSdkBlocked so the reader can show a clearer
+    "your browser is blocking it" hint.
+    """
+    fallback_loader = (
+        "var s=document.createElement('script');"
+        "s.src='" + AZURE_SPEECH_SDK_URL_FALLBACK + "';"
+        "s.onerror=function(){window.__readerSdkBlocked=true;};"
+        "document.head.appendChild(s);"
+    )
+    return (
+        '<script src="' + AZURE_SPEECH_SDK_URL + '" '
+        'onerror="' + fallback_loader + '"></script>'
+    )
 
 
 def digest_reader_css() -> str:
@@ -283,39 +305,103 @@ def digest_reader_script(
     return (title ? title + ". " : "") + chunks.join(" ");
   }}
 
+  // One synthesizer per voice, kept alive across cards so the Azure websocket
+  // stays warm instead of reconnecting per card (per-card reconnects were a
+  // source of wss 1006). Disposed on error (so a retry reconnects) and when the
+  // read finishes/stops or the credentials change.
+  var synthCache = {{}};   // voiceId -> SpeechSynthesizer
+  var synthCreds = null;   // {{ key, region }} the cached synthesizers were built with
+
+  function disposeSynth(voiceId) {{
+    var s = synthCache[voiceId];
+    if (s) {{ try {{ s.close(); }} catch (e) {{}} delete synthCache[voiceId]; }}
+  }}
+  function disposeAllSynths() {{
+    for (var k in synthCache) {{ if (Object.prototype.hasOwnProperty.call(synthCache, k)) disposeSynth(k); }}
+    synthCache = {{}};
+    synthCreds = null;
+  }}
+  function getSynth(SDK, key, region, voiceId) {{
+    if (!synthCreds || synthCreds.key !== key || synthCreds.region !== region) {{
+      disposeAllSynths();
+      synthCreds = {{ key: key, region: region }};
+    }}
+    if (!synthCache[voiceId]) {{
+      var cfg = SDK.SpeechConfig.fromSubscription(key, region);
+      cfg.speechSynthesisVoiceName = voiceId;
+      cfg.speechSynthesisOutputFormat = SDK.SpeechSynthesisOutputFormat.Audio24Khz48KBitRateMonoMp3;
+      synthCache[voiceId] = new SDK.SpeechSynthesizer(cfg, null);
+    }}
+    return synthCache[voiceId];
+  }}
+
   function synthOnce(key, region, text, voiceId) {{
     return new Promise(function(resolve, reject) {{
       var SDK = window.SpeechSDK;
-      if (!SDK) {{ reject(new Error(LANG === "vi" ? "Chưa tải được Azure Speech SDK." : "Azure Speech SDK failed to load.")); return; }}
-      var cfg;
+      if (!SDK) {{
+        var blocked = !!window.__readerSdkBlocked;
+        reject(new Error(
+          LANG === "vi"
+            ? (blocked
+                ? "Chưa tải được Azure Speech SDK — trình duyệt đang chặn (tắt trình chặn quảng cáo/VPN của Opera hoặc dùng trình duyệt khác)."
+                : "Chưa tải được Azure Speech SDK — thử tải lại trang.")
+            : (blocked
+                ? "Azure Speech SDK failed to load — your browser is blocking it (disable Opera's built-in ad blocker/VPN, or use another browser)."
+                : "Azure Speech SDK failed to load — try reloading the page.")
+        ));
+        return;
+      }}
+      var synth;
       try {{
-        cfg = SDK.SpeechConfig.fromSubscription(key, region);
-        cfg.speechSynthesisVoiceName = voiceId;
-        cfg.speechSynthesisOutputFormat = SDK.SpeechSynthesisOutputFormat.Audio24Khz48KBitRateMonoMp3;
-      }} catch (e) {{ reject(e); return; }}
-      var synth = new SDK.SpeechSynthesizer(cfg, null);
+        synth = getSynth(SDK, key, region, voiceId);
+      }} catch (e) {{ disposeSynth(voiceId); reject(e); return; }}
       synth.speakTextAsync(
         text,
         function(result) {{
-          try {{
-            if (result.reason === SDK.ResultReason.SynthesizingAudioCompleted) {{
-              resolve(result.audioData);
-            }} else {{
-              reject(new Error(result.errorDetails || ("TTS failed: " + result.reason)));
-            }}
-          }} finally {{ synth.close(); }}
+          if (result.reason === SDK.ResultReason.SynthesizingAudioCompleted) {{
+            resolve(result.audioData);  // keep the synthesizer open for the next card
+          }} else {{
+            var msg = result.errorDetails || ("TTS failed: " + result.reason);
+            disposeSynth(voiceId);      // drop it so a retry rebuilds the connection
+            reject(new Error(msg));
+          }}
         }},
-        function(err) {{ try {{ synth.close(); }} catch (e) {{}} reject(new Error(String(err))); }}
+        function(err) {{ disposeSynth(voiceId); reject(new Error(String(err))); }}
       );
     }});
   }}
+  // Ignore a pending prefetch we no longer await, so closing its synthesizer
+  // does not surface as an unhandled promise rejection.
+  function swallow(p) {{ if (p && typeof p.then === "function") {{ try {{ p.then(null, function() {{}}); }} catch (e) {{}} }} }}
+  function sleep(ms) {{ return new Promise(function(r) {{ setTimeout(r, ms); }}); }}
+  function isTransientErr(e) {{
+    var m = (e && e.message ? e.message : String(e)) || "";
+    // 1006 = abnormal websocket close; also generic connect/timeout/network drops.
+    return /1006|Unable to contact server|websocket|connection\\s|connection\\.|timed out|timeout|network/i.test(m);
+  }}
+  // Retry the SAME voice on transient connection drops (e.g. wss 1006) before giving up.
+  async function synthWithRetry(key, region, text, voiceId) {{
+    var lastErr;
+    for (var attempt = 0; attempt < 3; attempt++) {{
+      if (readAborted) throw new Error("aborted");
+      try {{
+        return await synthOnce(key, region, text, voiceId);
+      }} catch (e) {{
+        lastErr = e;
+        if (!isTransientErr(e) || attempt === 2) throw e;
+        console.warn("Reader TTS: transient failure, retrying (" + (attempt + 1) + ")", e);
+        await sleep(600 * (attempt + 1));
+      }}
+    }}
+    throw lastErr;
+  }}
   async function synth(key, region, text) {{
     try {{
-      return await synthOnce(key, region, text, VOICE);
+      return await synthWithRetry(key, region, text, VOICE);
     }} catch (e1) {{
       if (!VOICE_FALLBACK || VOICE_FALLBACK === VOICE) throw e1;
       console.warn("Reader TTS: primary voice failed, trying fallback", e1);
-      return await synthOnce(key, region, text, VOICE_FALLBACK);
+      return await synthWithRetry(key, region, text, VOICE_FALLBACK);
     }}
   }}
 
@@ -361,23 +447,26 @@ def digest_reader_script(
     if (currentAudio) {{ try {{ currentAudio.pause(); }} catch (e) {{}} currentAudio = null; }}
 
     var texts = cards.map(cardText).filter(function(t) {{ return t && t.trim(); }});
+    var prefetch = null;
     try {{
-      var prefetch = synth(key, region, texts[0]);
+      prefetch = synth(key, region, texts[0]);
       for (var j = 0; j < texts.length; j++) {{
         if (readAborted) break;
         status((LANG === "vi" ? "Đang tạo giọng (Azure)… " : "Synthesizing speech (Azure)… ") + (j + 1) + "/" + texts.length);
         var buf = await prefetch;
         if (readAborted) break;
-        if (j + 1 < texts.length) prefetch = synth(key, region, texts[j + 1]);
+        prefetch = (j + 1 < texts.length) ? synth(key, region, texts[j + 1]) : null;
         await playMp3Buffer(buf);
       }}
     }} catch (e) {{
       status(String(e && e.message ? e.message : e), true);
       if (readBtn) readBtn.disabled = false;
       if (stopBtn) stopBtn.disabled = true;
+      swallow(prefetch); disposeAllSynths();
       return;
     }}
 
+    swallow(prefetch); disposeAllSynths();
     if (readAborted) {{
       status(LANG === "vi" ? "Đã hủy." : "Cancelled.", false);
     }} else {{
@@ -393,6 +482,7 @@ def digest_reader_script(
       try {{ currentAudio.pause(); currentAudio.removeAttribute("src"); currentAudio.load(); }} catch (e) {{}}
       currentAudio = null;
     }}
+    disposeAllSynths();  // free the Azure websocket immediately on stop
     status(LANG === "vi" ? "Đã dừng." : "Stopped.", false);
     var readBtn = document.getElementById("readNews");
     var stopBtn = document.getElementById("stopRead");
