@@ -46,6 +46,11 @@ from digest_reader_embed import (
     digest_reader_sdk_script_tag,
     digest_reader_toolbar_inner,
 )
+from digest_rebuild_embed import (
+    digest_rebuild_css,
+    digest_rebuild_script,
+    digest_rebuild_toolbar_inner,
+)
 from news_filters import (
     effective_cap,
     is_excluded,
@@ -874,6 +879,7 @@ def build_html(
     .linkrow {{ margin: 0.85rem 0 0; word-break: break-all; font-size: 0.85rem; }}
     a.full {{ color: var(--accent); }}
 {digest_reader_css()}
+{digest_rebuild_css()}
   </style>
 </head>
 <body>
@@ -890,6 +896,7 @@ def build_html(
       <button type="button" class="reset" id="resetDays">Show all</button>
       <p class="filter-hint">{filter_hint_esc}</p>
 {digest_reader_toolbar_inner(lang="en")}
+{digest_rebuild_toolbar_inner(lang="en", selected="security-news-daily.yml")}
     </div>
 {body}
   </div>
@@ -941,6 +948,9 @@ def build_html(
         voice_fallback=read_news_azure_voice_fallback,
         region_default=read_news_azure_region,
     )}
+  </script>
+  <script>
+{digest_rebuild_script(lang="en")}
   </script>
 </body>
 </html>

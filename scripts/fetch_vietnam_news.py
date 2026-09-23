@@ -45,6 +45,11 @@ from digest_reader_embed import (
     digest_reader_sdk_script_tag,
     digest_reader_toolbar_inner,
 )
+from digest_rebuild_embed import (
+    digest_rebuild_css,
+    digest_rebuild_script,
+    digest_rebuild_toolbar_inner,
+)
 import groq_summary as groq
 from news_filters import (
     effective_cap,
@@ -912,6 +917,7 @@ def build_html(
     .digest-section-muted {{ color: #8fa6bf; font-size: 0.98rem; }}
     .card.card-top {{ border-color: #3d5c4a; box-shadow: 0 0 0 1px rgba(91, 213, 155, 0.12); }}
 {digest_reader_css()}
+{digest_rebuild_css()}
   </style>
 </head>
 <body>
@@ -928,6 +934,7 @@ def build_html(
       <button type="button" class="reset" id="resetDays">Hiện tất cả</button>
       <p class="filter-hint">{html_module.escape(filter_note)} Bài không có data-ts sẽ bị ẩn khi lọc.{reader_hint}</p>
 {digest_reader_toolbar_inner(lang="vi")}
+{digest_rebuild_toolbar_inner(lang="vi", selected="vietnam-news-daily.yml")}
     </div>
 {body}
   </div>
@@ -970,6 +977,9 @@ def build_html(
         voice_fallback=read_news_azure_voice_fallback,
         region_default=read_news_azure_region,
     )}
+  </script>
+  <script>
+{digest_rebuild_script(lang="vi")}
   </script>
 </body>
 </html>
