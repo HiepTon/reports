@@ -664,7 +664,64 @@ def fetch_feed_bytes(url: str, timeout: int) -> bytes:
         raise RuntimeError(f"Network error for {url}: {exc.reason}") from exc
 
 
+def _parse_kev_json(source_id: str, source_name: str, url: str, timeout: int, max_recent: int = 60) -> list[NewsItem]:
+    """Parse CISA's Known Exploited Vulnerabilities catalog JSON into NewsItems.
+
+    CISA retired its RSS/XML feeds (May 2025); this JSON under /sites/default/files/feeds/
+    is the surviving machine-readable source and is served outside the WAF that 403s the
+    old .xml feeds. Newest-by-dateAdded first; each CVE links to its NVD detail page.
+    """
+    raw = fetch_feed_bytes(url, timeout)
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise RuntimeError(f"{source_name}: invalid KEV JSON ({exc})") from exc
+    vulns = data.get("vulnerabilities") if isinstance(data, dict) else None
+    if not vulns:
+        raise RuntimeError(f"{source_name}: no 'vulnerabilities' in KEV JSON")
+    vulns = sorted(vulns, key=lambda v: str(v.get("dateAdded") or ""), reverse=True)[:max_recent]
+
+    items: list[NewsItem] = []
+    for v in vulns:
+        cve = str(v.get("cveID") or "").strip()
+        if not cve:
+            continue
+        name = str(v.get("vulnerabilityName") or "").strip()
+        vp = " ".join(p for p in (str(v.get("vendorProject") or "").strip(), str(v.get("product") or "").strip()) if p)
+        topic = f"{cve}: {name}" if name else cve
+        parts = []
+        if vp:
+            parts.append(f"{vp}.")
+        desc = strip_html(str(v.get("shortDescription") or ""), 340)
+        if desc:
+            parts.append(desc)
+        action = str(v.get("requiredAction") or "").strip()
+        if action:
+            due = str(v.get("dueDate") or "").strip()
+            parts.append(f"Required action: {action}" + (f" (due {due})." if due else "."))
+        if str(v.get("knownRansomwareCampaignUse") or "").strip().lower() == "known":
+            parts.append("Known use in ransomware campaigns.")
+        summary = strip_html(" ".join(parts), 460) or "(CISA KEV entry.)"
+        date_added = str(v.get("dateAdded") or "").strip()
+        items.append(
+            NewsItem(
+                source_id=source_id,
+                source_name=source_name,
+                topic=topic[:300],
+                summary=summary,
+                analysis=heuristic_analysis(topic, summary),
+                link=f"https://nvd.nist.gov/vuln/detail/{cve}",
+                published=f"{date_added}T00:00:00+00:00" if date_added else None,
+            )
+        )
+    if not items:
+        raise RuntimeError(f"{source_name}: no usable KEV entries")
+    return items
+
+
 def parse_feed(source_id: str, source_name: str, url: str, timeout: int) -> list[NewsItem]:
+    if url.endswith(".json"):  # CISA KEV catalog (JSON), not an RSS/Atom feed
+        return _parse_kev_json(source_id, source_name, url, timeout)
     raw = fetch_feed_bytes(url, timeout)
     parsed = feedparser.parse(raw)
     if getattr(parsed, "bozo_exception", None) and not parsed.entries:
