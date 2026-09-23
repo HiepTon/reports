@@ -454,18 +454,19 @@ def _is_gemini_json_retryable(exc: BaseException) -> bool:
         "unterminated string" in msg
         or "invalid control character" in msg
         or "invalid \\escape" in msg
+        or "empty text" in msg
+        or "returned empty" in msg
     )
 
 
 def _gemini_model_candidates(primary: str, fallback: str | None) -> list[str]:
-    p = (primary or "").strip()
+    """[primary, *fallbacks] deduped. `fallback` may be a comma-separated chain; each Groq
+    model has its own daily token budget, so more candidates = more daily headroom."""
     out: list[str] = []
-    if p:
-        out.append(p)
-    if fallback:
-        f = fallback.strip()
-        if f and f.lower() != p.lower():
-            out.append(f)
+    for m in [primary or ""] + (fallback or "").split(","):
+        m = m.strip()
+        if m and not any(m.lower() == e.lower() for e in out):
+            out.append(m)
     return out
 
 
@@ -771,7 +772,14 @@ def groq_vietnam_enrich(
                     file=sys.stderr,
                 )
                 break
-            raise last_err
+            # Một chunk lỗi trên mọi model (vd: trả về rỗng): chỉ giữ trích đoạn RSS cho
+            # các bài này rồi tiếp tục — không bao giờ vứt bỏ các chunk đã tóm tắt thành công.
+            print(
+                f"Groq chunk {start}-{end - 1}: mọi model đều lỗi ({last_err!s}); "
+                f"giữ trích đoạn RSS cho {len(indices)} bài này và tiếp tục.",
+                file=sys.stderr,
+            )
+            continue
 
         if end < n and chunk_pause_s > 0:
             time.sleep(chunk_pause_s)
@@ -1043,8 +1051,9 @@ def main() -> int:
         "--summary-model-fallback",
         dest="summary_model_fallback",
         default=groq.SUMMARY_MODEL_FALLBACK_DEFAULT,
-        metavar="MODEL_ID",
-        help="Nếu model chính thất bại sau các lần thử, thử lại từng chunk với model này.",
+        metavar="MODEL_IDS",
+        help="Chuỗi model dự phòng (phân tách bằng dấu phẩy): nếu model chính lỗi hoặc hết hạn "
+        "mức ngày, thử lại từng chunk với model kế tiếp. Mỗi model Groq có hạn mức token/ngày riêng.",
     )
     parser.add_argument("--gemini-max-excerpt-chars", type=int, default=480, help="Với --gemini-no-fetch-article: giới hạn ký tự mô tả RSS gửi Gemini.")
     parser.add_argument(

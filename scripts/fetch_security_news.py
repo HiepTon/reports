@@ -281,14 +281,13 @@ def strip_json_fenced_text(text: str) -> str:
 
 
 def _gemini_model_candidates(primary: str, fallback: str | None) -> list[str]:
-    p = (primary or "").strip()
+    """[primary, *fallbacks] deduped. `fallback` may be a comma-separated chain; each Groq
+    model has its own daily token budget, so more candidates = more daily headroom."""
     out: list[str] = []
-    if p:
-        out.append(p)
-    if fallback:
-        f = fallback.strip()
-        if f and f.lower() != p.lower():
-            out.append(f)
+    for m in [primary or ""] + (fallback or "").split(","):
+        m = m.strip()
+        if m and not any(m.lower() == e.lower() for e in out):
+            out.append(m)
     return out
 
 
@@ -575,6 +574,17 @@ def groq_batch_enrich(
                         )
                         time.sleep(delay)
                         continue
+                    # An empty/malformed response is usually a one-off; retry the same model.
+                    msg = str(exc).lower()
+                    if ("empty text" in msg or "returned empty" in msg or isinstance(exc, json.JSONDecodeError)) and attempt < max_retries - 1:
+                        delay = min(5.0 * (1.6**attempt), 60.0)
+                        print(
+                            f"Groq empty/malformed response on chunk {start}-{end - 1}; sleeping {delay:.1f}s "
+                            f"(retry {attempt + 2}/{max_retries}, model={active_model!r}).",
+                            file=sys.stderr,
+                        )
+                        time.sleep(delay)
+                        continue
                     break
 
             if chunk_ok:
@@ -598,7 +608,14 @@ def groq_batch_enrich(
                     file=sys.stderr,
                 )
                 break
-            raise last_err
+            # One chunk failed on every model (e.g. an empty response): keep RSS excerpts for
+            # just these articles and continue — never discard the chunks that did summarize.
+            print(
+                f"Groq chunk {start}-{end - 1}: all models failed ({last_err!s}); "
+                f"keeping RSS excerpts for these {len(indices)} article(s) and continuing.",
+                file=sys.stderr,
+            )
+            continue
 
         if end < n and chunk_pause_s > 0:
             time.sleep(chunk_pause_s)
@@ -1039,9 +1056,10 @@ def main() -> int:
         "--summary-model-fallback",
         dest="summary_model_fallback",
         default=groq.SUMMARY_MODEL_FALLBACK_DEFAULT,
-        metavar="MODEL_ID",
-        help=f"If the primary model fails after retries, retry each chunk with this model "
-        f"(default: {groq.SUMMARY_MODEL_FALLBACK_DEFAULT}).",
+        metavar="MODEL_IDS",
+        help=f"Comma-separated fallback chain: if the primary model fails (or hits its daily "
+        f"cap), each chunk is retried with the next model. Each Groq model has its own daily "
+        f"token budget (default: {groq.SUMMARY_MODEL_FALLBACK_DEFAULT}).",
     )
     parser.add_argument(
         "--gemini-max-excerpt-chars",

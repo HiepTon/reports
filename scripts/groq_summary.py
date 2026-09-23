@@ -15,11 +15,12 @@ import urllib.request
 
 GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
 
-# Groq free-tier models (Llama 3.x ids were deprecated mid-2026 in favor of gpt-oss).
-# 20b is the primary: on the 8K-TPM free tier, 120b's heavier reasoning often consumes the
-# whole output budget and returns empty content, so it only wastes a request before 20b runs.
+# Groq free-tier chat models (verified 2026-09; Llama 3.x left the free tier Aug 2026).
+# Each model has its OWN 200K-tokens/day (TPD) free budget, so a comma-separated fallback
+# CHAIN multiplies daily headroom: when one model's daily cap is hit, move to the next.
+# 20b is the primary (fastest); 120b then qwen3-32b are fallbacks (qwen is preview-tier).
 SUMMARY_MODEL_DEFAULT = "openai/gpt-oss-20b"
-SUMMARY_MODEL_FALLBACK_DEFAULT = "openai/gpt-oss-120b"
+SUMMARY_MODEL_FALLBACK_DEFAULT = "openai/gpt-oss-120b,qwen/qwen3-32b"
 
 # api.groq.com sits behind Cloudflare, which returns "Error 1010: browser_signature_banned"
 # for the default urllib User-Agent (Python-urllib/x.y). Send a normal browser UA instead.
