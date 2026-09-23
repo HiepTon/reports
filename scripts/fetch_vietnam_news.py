@@ -646,6 +646,8 @@ def groq_vietnam_enrich(
     # Model đã hết hạn mức ngày trong lần chạy này — bỏ qua ở các chunk sau (hạn mức ngày
     # không hồi trong vài phút, thử lại chỉ tốn thêm một request rồi lại lỗi).
     exhausted_models: set[str] = set()
+    # Bucket TPM trực tiếp từ header phản hồi Groq, dùng để giãn nhịp request (xem dưới).
+    rate_limit = groq.RateLimit()
 
     for start in range(0, n, chunk_size):
         end = min(start + chunk_size, n)
@@ -703,6 +705,7 @@ def groq_vietnam_enrich(
                         temperature=0.35,
                         timeout_s=request_timeout_s,
                         reasoning_effort="low",
+                        rate_out=rate_limit,
                     )
                     if not raw_text:
                         raise RuntimeError("Groq returned empty text.")
@@ -795,8 +798,14 @@ def groq_vietnam_enrich(
             )
             continue
 
-        if end < n and chunk_pause_s > 0:
-            time.sleep(chunk_pause_s)
+        if end < n:
+            # Giãn nhịp theo bucket TPM trực tiếp thay vì chờ cố định: chỉ chờ đủ để request
+            # kế tiếp (cỡ ~đầy) vừa với hạn mức.
+            delay = groq.pace_delay_seconds(
+                rate_limit, int(summary_tpm * 0.85), tpm_limit=summary_tpm, fallback_s=chunk_pause_s
+            )
+            if delay > 0:
+                time.sleep(delay)
 
     return out, used_fallback
 

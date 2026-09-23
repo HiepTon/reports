@@ -489,6 +489,8 @@ def groq_batch_enrich(
     # Models that hit their daily cap this run — skipped for the rest of it (a daily cap
     # won't refill in minutes, so re-trying the model on later chunks only wastes a call).
     exhausted_models: set[str] = set()
+    # Live TPM bucket from Groq's response headers, used to pace requests (see below).
+    rate_limit = groq.RateLimit()
 
     for start in range(0, n, chunk_size):
         end = min(start + chunk_size, n)
@@ -545,6 +547,7 @@ def groq_batch_enrich(
                         temperature=0.35,
                         timeout_s=request_timeout_s,
                         reasoning_effort="low",
+                        rate_out=rate_limit,
                     )
                     if not raw_text:
                         raise RuntimeError("Groq returned empty text.")
@@ -630,8 +633,14 @@ def groq_batch_enrich(
             )
             continue
 
-        if end < n and chunk_pause_s > 0:
-            time.sleep(chunk_pause_s)
+        if end < n:
+            # Pace the next request off the live TPM bucket instead of a blind fixed wait:
+            # wait only long enough for the next ~full-size request to fit under the cap.
+            delay = groq.pace_delay_seconds(
+                rate_limit, int(summary_tpm * 0.85), tpm_limit=summary_tpm, fallback_s=chunk_pause_s
+            )
+            if delay > 0:
+                time.sleep(delay)
 
     return out, used_fallback
 

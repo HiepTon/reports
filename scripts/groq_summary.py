@@ -10,10 +10,15 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 
 GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
+
+# Groq free tier caps requests-per-minute; used to floor the gap between requests.
+DEFAULT_RPM_LIMIT = 30
 
 # Groq free-tier chat models (verified 2026-09; Llama 3.x left the free tier Aug 2026).
 # Each model has its OWN 200K-tokens/day (TPD) free budget, so a comma-separated fallback
@@ -55,6 +60,69 @@ def input_char_budget_per_item(
     budget_tokens = tpm_limit * safety - output_tokens - instructions_reserve_tokens
     budget_tokens = max(budget_tokens, 400)
     return max(300, int(budget_tokens * _CHARS_PER_TOKEN / n))
+
+
+@dataclass
+class RateLimit:
+    """Latest Groq rate-limit state from response headers (TPM = tokens-per-minute bucket).
+
+    Groq returns x-ratelimit-remaining-tokens / x-ratelimit-reset-tokens on every response,
+    so callers can pace the next request exactly instead of using a blind fixed delay.
+    """
+
+    remaining_tokens: float | None = None  # TPM tokens left in the bucket right now
+    reset_tokens_s: float | None = None    # seconds until the TPM bucket is full again
+
+
+def _parse_groq_duration(s: str | None) -> float | None:
+    """Parse Groq duration strings like '7.66s', '1m30s', '2m59.56s', '500ms', '1h2m3s'."""
+    if not s:
+        return None
+    total = 0.0
+    found = False
+    for val, unit in re.findall(r"([\d.]+)\s*(ms|s|m|h)", s):
+        found = True
+        total += float(val) * {"ms": 0.001, "s": 1.0, "m": 60.0, "h": 3600.0}[unit]
+    return total if found else None
+
+
+def fill_rate_limit(rl: RateLimit, headers) -> None:
+    """Populate `rl` from an HTTP response's headers (case-insensitive .get)."""
+    rt = headers.get("x-ratelimit-remaining-tokens")
+    if rt is not None:
+        try:
+            rl.remaining_tokens = float(rt)
+        except (TypeError, ValueError):
+            pass
+    d = _parse_groq_duration(headers.get("x-ratelimit-reset-tokens"))
+    if d is not None:
+        rl.reset_tokens_s = d
+
+
+def pace_delay_seconds(
+    rl: RateLimit,
+    next_request_tokens: int,
+    *,
+    tpm_limit: int = DEFAULT_TPM_LIMIT,
+    rpm_limit: int = DEFAULT_RPM_LIMIT,
+    buffer_s: float = 1.0,
+    fallback_s: float = 45.0,
+) -> float:
+    """Seconds to wait before the next request so it stays under the TPM (and RPM) caps.
+
+    Uses the live token bucket from the last response: if enough tokens remain for the next
+    request, wait only the RPM floor (~60/rpm); otherwise wait for the shortfall to refill
+    (proportional, capped at the reported full-reset time). Falls back to `fallback_s` when
+    the headers are absent.
+    """
+    rpm_gap = 60.0 / max(1, rpm_limit)
+    if rl.remaining_tokens is None or rl.reset_tokens_s is None:
+        return fallback_s
+    if rl.remaining_tokens >= next_request_tokens:
+        return rpm_gap
+    refill_per_s = max(1.0, tpm_limit / 60.0)
+    shortfall = next_request_tokens - rl.remaining_tokens
+    return max(rpm_gap, min(shortfall / refill_per_s, rl.reset_tokens_s) + buffer_s)
 
 
 class GroqError(RuntimeError):
@@ -117,6 +185,7 @@ def chat_text(
     system: str | None = None,
     reasoning_effort: str | None = None,
     json_object: bool = False,
+    rate_out: RateLimit | None = None,
 ) -> str:
     """POST a single-turn chat completion and return the assistant message text.
 
@@ -147,6 +216,8 @@ def chat_text(
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310 — intentional API call
+            if rate_out is not None:
+                fill_rate_limit(rate_out, resp.headers)
             data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = ""
