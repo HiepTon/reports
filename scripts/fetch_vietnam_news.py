@@ -643,6 +643,9 @@ def groq_vietnam_enrich(
     out = list(items)
     used_fallback = False
     model_candidates = _gemini_model_candidates(model, model_fallback)
+    # Model đã hết hạn mức ngày trong lần chạy này — bỏ qua ở các chunk sau (hạn mức ngày
+    # không hồi trong vài phút, thử lại chỉ tốn thêm một request rồi lại lỗi).
+    exhausted_models: set[str] = set()
 
     for start in range(0, n, chunk_size):
         end = min(start + chunk_size, n)
@@ -675,10 +678,19 @@ def groq_vietnam_enrich(
         )
         prompt = instructions + json.dumps(payload, ensure_ascii=False)
 
+        available = [m for m in model_candidates if m not in exhausted_models]
+        if not available:
+            print(
+                f"Groq: mọi model đã hết hạn mức ngày; giữ trích đoạn RSS từ chunk "
+                f"{start}-{end - 1} trở đi.",
+                file=sys.stderr,
+            )
+            break
+
         chunk_ok = False
         last_err: BaseException | None = None
 
-        for mi, active_model in enumerate(model_candidates):
+        for mi, active_model in enumerate(available):
             for attempt in range(max_retries):
                 tokens_this_chunk = out_tokens
 
@@ -714,7 +726,7 @@ def groq_vietnam_enrich(
                             continue
                         out[i] = replace(out[i], summary=summary[:4000], category=cat, summarized=True)
                     chunk_ok = True
-                    if mi > 0:
+                    if active_model != model_candidates[0]:
                         used_fallback = True
                         print(
                             f"Groq chunk {start}-{end - 1}: OK (fallback model {active_model!r}).",
@@ -724,10 +736,12 @@ def groq_vietnam_enrich(
                 except Exception as exc:  # noqa: BLE001 — retry transient/JSON, else next model
                     last_err = exc
                     if groq.is_daily_quota(exc):
-                        # Hạn mức token/ngày: chờ cũng vô ích. Bỏ retry, để vòng model thử fallback.
+                        # Hạn mức token/ngày: chờ cũng vô ích. Loại model này khỏi lần chạy và
+                        # chuyển sang model kế tiếp (mỗi model có hạn mức ngày riêng).
+                        exhausted_models.add(active_model)
                         print(
                             f"Groq hết hạn mức ngày ở chunk {start}-{end - 1} (model {active_model!r}: {exc!s}); "
-                            "bỏ qua retry.",
+                            "loại model này khỏi lần chạy.",
                             file=sys.stderr,
                         )
                         break
@@ -754,10 +768,10 @@ def groq_vietnam_enrich(
             if chunk_ok:
                 break
 
-            if mi < len(model_candidates) - 1:
+            if mi < len(available) - 1:
                 print(
                     f"Groq chunk {start}-{end - 1}: model {active_model!r} thất bại ({last_err!s}); "
-                    f"thử {model_candidates[mi + 1]!r}.",
+                    f"thử {available[mi + 1]!r}.",
                     file=sys.stderr,
                 )
 

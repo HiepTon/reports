@@ -486,6 +486,9 @@ def groq_batch_enrich(
     out = list(items)
     used_fallback = False
     model_candidates = _gemini_model_candidates(model, model_fallback)
+    # Models that hit their daily cap this run — skipped for the rest of it (a daily cap
+    # won't refill in minutes, so re-trying the model on later chunks only wastes a call).
+    exhausted_models: set[str] = set()
 
     for start in range(0, n, chunk_size):
         end = min(start + chunk_size, n)
@@ -518,10 +521,19 @@ def groq_batch_enrich(
         )
         prompt = instructions + json.dumps(payload, ensure_ascii=False)
 
+        available = [m for m in model_candidates if m not in exhausted_models]
+        if not available:
+            print(
+                f"Groq: all models hit their daily cap; keeping RSS excerpts from chunk "
+                f"{start}-{end - 1} onward.",
+                file=sys.stderr,
+            )
+            break
+
         chunk_ok = False
         last_err: BaseException | None = None
 
-        for mi, active_model in enumerate(model_candidates):
+        for mi, active_model in enumerate(available):
             for attempt in range(max_retries):
                 tokens_this_chunk = out_tokens
                 try:
@@ -547,7 +559,7 @@ def groq_batch_enrich(
                     by_i, by_l = _rows_to_index_maps(rows)
                     _apply_gemini_rows(out, indices, by_i, by_l)
                     chunk_ok = True
-                    if mi > 0:
+                    if active_model != model_candidates[0]:
                         used_fallback = True
                         print(
                             f"Groq chunk {start}-{end - 1}: OK using fallback model {active_model!r}.",
@@ -557,11 +569,12 @@ def groq_batch_enrich(
                 except Exception as exc:  # noqa: BLE001 — retry transient, else fall through to next model
                     last_err = exc
                     if groq.is_daily_quota(exc):
-                        # Daily token/request cap: sleeping won't refill it. Skip retries
-                        # and let the model loop try the fallback (separate daily budget).
+                        # Daily token/request cap: sleeping won't refill it. Retire this model
+                        # for the rest of the run and try the next (separate daily budget).
+                        exhausted_models.add(active_model)
                         print(
                             f"Groq daily quota hit on chunk {start}-{end - 1} with model {active_model!r} "
-                            f"({exc!s}); skipping retries.",
+                            f"({exc!s}); retiring it for this run.",
                             file=sys.stderr,
                         )
                         break
@@ -590,10 +603,10 @@ def groq_batch_enrich(
             if chunk_ok:
                 break
 
-            if mi < len(model_candidates) - 1:
+            if mi < len(available) - 1:
                 print(
                     f"Groq chunk {start}-{end - 1}: model {active_model!r} failed ({last_err!s}); "
-                    f"retrying with {model_candidates[mi + 1]!r}.",
+                    f"retrying with {available[mi + 1]!r}.",
                     file=sys.stderr,
                 )
 
