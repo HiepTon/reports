@@ -137,6 +137,11 @@ def groq_api_key() -> str | None:
     return (os.environ.get("GROQ_API_KEY") or "").strip() or None
 
 
+def api_key() -> str | None:
+    """Provider-agnostic alias (matches gemini_summary.api_key)."""
+    return groq_api_key()
+
+
 def is_daily_quota(exc: BaseException) -> bool:
     """A 429 that is a *daily* token/request cap (TPD/RPD).
 

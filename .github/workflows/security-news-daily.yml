@@ -64,14 +64,20 @@ jobs:
       - name: Build security digest (site root index.html)
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           set -e
+          # Prefer Gemini when its key is set, else Groq, else RSS/heuristic only.
           SUMMARIZE_FLAG=""
-          if [ -n "${GROQ_API_KEY:-}" ]; then
-            SUMMARIZE_FLAG="--summarize"
-            echo "GROQ_API_KEY is set; enabling Groq (chunked summaries)."
+          PROVIDER_FLAG=""
+          if [ -n "${GEMINI_API_KEY:-}" ]; then
+            SUMMARIZE_FLAG="--summarize"; PROVIDER_FLAG="--summary-provider gemini"
+            echo "GEMINI_API_KEY set; summarizing via Gemini."
+          elif [ -n "${GROQ_API_KEY:-}" ]; then
+            SUMMARIZE_FLAG="--summarize"; PROVIDER_FLAG="--summary-provider groq"
+            echo "GROQ_API_KEY set; summarizing via Groq."
           else
-            echo "GROQ_API_KEY not set; using RSS + heuristic text only."
+            echo "No summary key set; using RSS + heuristic text only."
           fi
           python scripts/fetch_security_news.py \
             --days 3 \
@@ -81,7 +87,7 @@ jobs:
             --html site/index.html \
             --gemini-chunk-size 3 \
             --gemini-chunk-pause 45 \
-            $SUMMARIZE_FLAG
+            $SUMMARIZE_FLAG $PROVIDER_FLAG
 
       - name: Snapshot to archive and rebuild archive index
         run: |

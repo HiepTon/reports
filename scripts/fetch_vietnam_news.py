@@ -51,6 +51,7 @@ from digest_rebuild_embed import (
     digest_rebuild_toolbar_inner,
 )
 import groq_summary as groq
+import gemini_summary
 from news_filters import (
     effective_cap,
     is_excluded,
@@ -58,6 +59,9 @@ from news_filters import (
     parse_cli_keywords,
     parse_max_items,
 )
+
+# Summary providers selectable via --summary-provider / SUMMARY_PROVIDER.
+_SUMMARY_PROVIDERS = {"groq": groq, "gemini": gemini_summary}
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_FEEDS_PATH = _REPO_ROOT / "config" / "vietnam_news_feeds.json"
@@ -603,10 +607,13 @@ def groq_vietnam_enrich(
     chunk_size: int,
     chunk_pause_s: float,
     max_retries: int,
-    summary_tpm: int = groq.DEFAULT_TPM_LIMIT,
+    summary_tpm: int | None = None,
+    svc=groq,  # summary provider module (groq_summary or gemini_summary)
 ) -> tuple[list[VietnamNewsItem], bool]:
     if not items:
         return items, False
+    if summary_tpm is None:
+        summary_tpm = svc.DEFAULT_TPM_LIMIT
 
     cats_literal = " | ".join(VIETNAM_CATEGORY_LABELS)
     if full_article:
@@ -647,7 +654,7 @@ def groq_vietnam_enrich(
     # không hồi trong vài phút, thử lại chỉ tốn thêm một request rồi lại lỗi).
     exhausted_models: set[str] = set()
     # Bucket TPM trực tiếp từ header phản hồi Groq, dùng để giãn nhịp request (xem dưới).
-    rate_limit = groq.RateLimit()
+    rate_limit = svc.RateLimit()
 
     for start in range(0, n, chunk_size):
         end = min(start + chunk_size, n)
@@ -666,10 +673,10 @@ def groq_vietnam_enrich(
         else:
             bodies = {i: out[i].summary for i in indices}
         # Keep each request under the free-tier TPM: small output reservation + input trimmed to fit.
-        out_tokens = groq.output_token_budget(len(indices), max_output_tokens)
+        out_tokens = svc.output_token_budget(len(indices), max_output_tokens)
         body_char_cap = min(
             max_article_chars if full_article else max_excerpt_chars,
-            groq.input_char_budget_per_item(len(indices), output_tokens=out_tokens, tpm_limit=summary_tpm),
+            svc.input_char_budget_per_item(len(indices), output_tokens=out_tokens, tpm_limit=summary_tpm),
         )
         payload = _gemini_payload_rows_vn(
             out,
@@ -697,7 +704,7 @@ def groq_vietnam_enrich(
                 tokens_this_chunk = out_tokens
 
                 try:
-                    raw_text = groq.chat_text(
+                    raw_text = svc.chat_text(
                         token=api_key,
                         model=active_model,
                         prompt=prompt,
@@ -738,19 +745,19 @@ def groq_vietnam_enrich(
                     break
                 except Exception as exc:  # noqa: BLE001 — retry transient/JSON, else next model
                     last_err = exc
-                    if groq.is_daily_quota(exc) or groq.is_model_unavailable(exc):
+                    if svc.is_daily_quota(exc) or svc.is_model_unavailable(exc):
                         # Hết hạn mức ngày (không hồi) hoặc model 404/không khả dụng: loại model
                         # này khỏi lần chạy và chuyển sang model kế tiếp.
                         exhausted_models.add(active_model)
-                        reason = "hết hạn mức ngày" if groq.is_daily_quota(exc) else "model không khả dụng (404)"
+                        reason = "hết hạn mức ngày" if svc.is_daily_quota(exc) else "model không khả dụng (404)"
                         print(
                             f"Groq {reason} ở chunk {start}-{end - 1} (model {active_model!r}: {exc!s}); "
                             "loại model này khỏi lần chạy.",
                             file=sys.stderr,
                         )
                         break
-                    if groq.is_transient(exc) and attempt < max_retries - 1:
-                        delay = groq.retry_sleep_seconds(exc, attempt)
+                    if svc.is_transient(exc) and attempt < max_retries - 1:
+                        delay = svc.retry_sleep_seconds(exc, attempt)
                         print(
                             f"Groq lỗi tạm thời; chunk {start}-{end - 1}, chờ {delay:.1f}s "
                             f"(lần {attempt + 2}/{max_retries}, model={active_model!r}).",
@@ -781,7 +788,7 @@ def groq_vietnam_enrich(
 
         if not chunk_ok:
             assert last_err is not None
-            if groq.is_daily_quota(last_err):
+            if svc.is_daily_quota(last_err):
                 # Tất cả model đã hết hạn mức ngày — các chunk sau cũng sẽ lỗi.
                 # Giữ trích đoạn RSS cho phần còn lại thay vì làm hỏng cả bản build.
                 print(
@@ -802,7 +809,7 @@ def groq_vietnam_enrich(
         if end < n:
             # Giãn nhịp theo bucket TPM trực tiếp thay vì chờ cố định: chỉ chờ đủ để request
             # kế tiếp (cỡ ~đầy) vừa với hạn mức.
-            delay = groq.pace_delay_seconds(
+            delay = svc.pace_delay_seconds(
                 rate_limit, int(summary_tpm * 0.85), tpm_limit=summary_tpm, fallback_s=chunk_pause_s
             )
             if delay > 0:
@@ -1070,14 +1077,23 @@ def main() -> int:
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--html", metavar="PATH")
     parser.add_argument("--summarize", "--gemini", dest="summarize", action="store_true")
-    parser.add_argument("--summary-model", dest="summary_model", default=groq.SUMMARY_MODEL_DEFAULT, metavar="MODEL_ID")
+    parser.add_argument(
+        "--summary-provider",
+        dest="summary_provider",
+        choices=sorted(_SUMMARY_PROVIDERS),
+        default=os.environ.get("SUMMARY_PROVIDER", "groq"),
+        help="Nhà cung cấp LLM tóm tắt: 'groq' (GROQ_API_KEY) hoặc 'gemini' "
+        "(GEMINI_API_KEY, từ aistudio.google.com). Mặc định: groq, hoặc biến SUMMARY_PROVIDER.",
+    )
+    parser.add_argument("--summary-model", dest="summary_model", default=None, metavar="MODEL_ID",
+                        help="Model chính; mặc định theo provider được chọn.")
     parser.add_argument(
         "--summary-model-fallback",
         dest="summary_model_fallback",
-        default=groq.SUMMARY_MODEL_FALLBACK_DEFAULT,
+        default=None,
         metavar="MODEL_IDS",
         help="Chuỗi model dự phòng (phân tách bằng dấu phẩy): nếu model chính lỗi hoặc hết hạn "
-        "mức ngày, thử lại từng chunk với model kế tiếp. Mỗi model Groq có hạn mức token/ngày riêng.",
+        "mức ngày, thử lại từng chunk với model kế tiếp. Mặc định theo provider được chọn.",
     )
     parser.add_argument("--gemini-max-excerpt-chars", type=int, default=480, help="Với --gemini-no-fetch-article: giới hạn ký tự mô tả RSS gửi Gemini.")
     parser.add_argument(
@@ -1090,7 +1106,7 @@ def main() -> int:
     parser.add_argument("--gemini-article-fetch-pause", type=float, default=0.35, help="Giây nghỉ giữa các lần tải trang (lịch sự).")
     parser.add_argument("--gemini-max-article-chars", type=int, default=6_000, help="Tối đa ký tự plain text/bài gửi model (còn bị cắt thêm để vừa --summary-tpm).")
     parser.add_argument("--gemini-max-output-tokens", type=int, default=2048)
-    parser.add_argument("--summary-tpm", type=int, default=groq.DEFAULT_TPM_LIMIT, metavar="N", help=f"Giới hạn tokens/phút của gói Groq (mặc định {groq.DEFAULT_TPM_LIMIT}, gói free). Input mỗi request bị cắt để không vượt.")
+    parser.add_argument("--summary-tpm", type=int, default=None, metavar="N", help="Giới hạn tokens/phút của gói (mặc định theo provider). Input mỗi request bị cắt để không vượt.")
     parser.add_argument("--gemini-timeout", type=int, default=180)
     parser.add_argument("--gemini-chunk-size", type=int, default=3)
     parser.add_argument("--gemini-chunk-pause", type=float, default=45.0)
@@ -1146,22 +1162,27 @@ def main() -> int:
 
     summary_model_used: str | None = None
     if args.summarize:
-        key = groq.groq_api_key()
+        svc = _SUMMARY_PROVIDERS[args.summary_provider]
+        provider_name = args.summary_provider
+        key = svc.api_key()
         if not key:
-            print("Cần GROQ_API_KEY khi dùng --summarize.", file=sys.stderr)
+            env_var = "GEMINI_API_KEY" if provider_name == "gemini" else "GROQ_API_KEY"
+            print(f"Cần {env_var} khi dùng --summarize với provider '{provider_name}'.", file=sys.stderr)
             return 2
+        model = args.summary_model or svc.SUMMARY_MODEL_DEFAULT
+        model_fallback = args.summary_model_fallback if args.summary_model_fallback is not None else svc.SUMMARY_MODEL_FALLBACK_DEFAULT
         try:
             if not args.gemini_no_fetch_article:
                 print(
-                    "Tóm tắt (Groq): đang tải từng trang bài và trích văn bản để tóm tắt "
+                    f"Tóm tắt ({provider_name}): đang tải từng trang bài và trích văn bản để tóm tắt "
                     "(thêm --gemini-no-fetch-article nếu chỉ muốn RSS).",
                     file=sys.stderr,
                 )
             items, vn_fallback_used = groq_vietnam_enrich(
                 items,
                 api_key=key,
-                model=args.summary_model,
-                model_fallback=args.summary_model_fallback,
+                model=model,
+                model_fallback=model_fallback,
                 full_article=not args.gemini_no_fetch_article,
                 article_fetch_timeout_s=args.gemini_article_timeout,
                 article_max_bytes=args.gemini_article_max_bytes,
@@ -1174,13 +1195,14 @@ def main() -> int:
                 chunk_pause_s=args.gemini_chunk_pause,
                 max_retries=args.gemini_retries,
                 summary_tpm=args.summary_tpm,
+                svc=svc,
             )
-            summary_model_used = args.summary_model
+            summary_model_used = model
             if vn_fallback_used:
-                summary_model_used = f"{args.summary_model} (fallback used: {args.summary_model_fallback})"
-            print(f"Groq OK ({summary_model_used}, {len(items)} bài).", file=sys.stderr)
+                summary_model_used = f"{model} (fallback used: {model_fallback})"
+            print(f"{provider_name} OK ({summary_model_used}, {len(items)} bài).", file=sys.stderr)
         except Exception as exc:  # noqa: BLE001
-            print(f"Groq lỗi, giữ tóm tắt RSS: {exc}", file=sys.stderr)
+            print(f"{provider_name} lỗi, giữ tóm tắt RSS: {exc}", file=sys.stderr)
 
     if args.html:
         out = Path(args.html)

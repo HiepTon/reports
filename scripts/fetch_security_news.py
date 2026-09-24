@@ -59,9 +59,13 @@ from news_filters import (
     parse_max_items,
 )
 import groq_summary as groq
+import gemini_summary
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DEFAULT_FEEDS_PATH = _REPO_ROOT / "config" / "security_news_feeds.json"
+
+# Summary providers selectable via --summary-provider / SUMMARY_PROVIDER.
+_SUMMARY_PROVIDERS = {"groq": groq, "gemini": gemini_summary}
 
 
 def default_feeds_config_path() -> Path:
@@ -442,7 +446,8 @@ def groq_batch_enrich(
     chunk_size: int,
     chunk_pause_s: float,
     max_retries: int,
-    summary_tpm: int = groq.DEFAULT_TPM_LIMIT,
+    summary_tpm: int | None = None,
+    svc=groq,  # summary provider module (groq_summary or gemini_summary)
 ) -> tuple[list[NewsItem], bool]:
     """
     Rewrite summaries/analysis via Groq (OpenAI-compatible chat completions) using chunked
@@ -485,12 +490,14 @@ def groq_batch_enrich(
 
     out = list(items)
     used_fallback = False
+    if summary_tpm is None:
+        summary_tpm = svc.DEFAULT_TPM_LIMIT
     model_candidates = _gemini_model_candidates(model, model_fallback)
     # Models that hit their daily cap this run — skipped for the rest of it (a daily cap
     # won't refill in minutes, so re-trying the model on later chunks only wastes a call).
     exhausted_models: set[str] = set()
     # Live TPM bucket from Groq's response headers, used to pace requests (see below).
-    rate_limit = groq.RateLimit()
+    rate_limit = svc.RateLimit()
 
     for start in range(0, n, chunk_size):
         end = min(start + chunk_size, n)
@@ -509,10 +516,10 @@ def groq_batch_enrich(
         else:
             bodies = {i: out[i].summary for i in indices}
         # Keep each request under the free-tier TPM: small output reservation + input trimmed to fit.
-        out_tokens = groq.output_token_budget(len(indices), max_output_tokens)
+        out_tokens = svc.output_token_budget(len(indices), max_output_tokens)
         body_char_cap = min(
             max_article_chars if full_article else max_excerpt_chars,
-            groq.input_char_budget_per_item(len(indices), output_tokens=out_tokens, tpm_limit=summary_tpm),
+            svc.input_char_budget_per_item(len(indices), output_tokens=out_tokens, tpm_limit=summary_tpm),
         )
         payload = _gemini_payload_rows(
             out,
@@ -539,7 +546,7 @@ def groq_batch_enrich(
             for attempt in range(max_retries):
                 tokens_this_chunk = out_tokens
                 try:
-                    raw_text = groq.chat_text(
+                    raw_text = svc.chat_text(
                         token=api_key,
                         model=active_model,
                         prompt=prompt,
@@ -571,19 +578,19 @@ def groq_batch_enrich(
                     break
                 except Exception as exc:  # noqa: BLE001 — retry transient, else fall through to next model
                     last_err = exc
-                    if groq.is_daily_quota(exc) or groq.is_model_unavailable(exc):
+                    if svc.is_daily_quota(exc) or svc.is_model_unavailable(exc):
                         # Daily cap (won't refill) or a 404/unavailable model id: retire this
                         # model for the rest of the run and fall through to the next candidate.
                         exhausted_models.add(active_model)
-                        reason = "daily quota hit" if groq.is_daily_quota(exc) else "model unavailable (404)"
+                        reason = "daily quota hit" if svc.is_daily_quota(exc) else "model unavailable (404)"
                         print(
                             f"Groq {reason} on chunk {start}-{end - 1} with model {active_model!r} "
                             f"({exc!s}); retiring it for this run.",
                             file=sys.stderr,
                         )
                         break
-                    if groq.is_transient(exc) and attempt < max_retries - 1:
-                        delay = groq.retry_sleep_seconds(exc, attempt)
+                    if svc.is_transient(exc) and attempt < max_retries - 1:
+                        delay = svc.retry_sleep_seconds(exc, attempt)
                         print(
                             f"Groq transient error on chunk {start}-{end - 1} ({exc!s}); sleeping {delay:.1f}s "
                             f"(retry {attempt + 2}/{max_retries}, model={active_model!r}).",
@@ -616,7 +623,7 @@ def groq_batch_enrich(
 
         if not chunk_ok:
             assert last_err is not None
-            if groq.is_daily_quota(last_err):
+            if svc.is_daily_quota(last_err):
                 # All models are out of daily budget — remaining chunks would fail too.
                 # Keep RSS excerpts for this and later chunks instead of crashing.
                 print(
@@ -637,7 +644,7 @@ def groq_batch_enrich(
         if end < n:
             # Pace the next request off the live TPM bucket instead of a blind fixed wait:
             # wait only long enough for the next ~full-size request to fit under the cap.
-            delay = groq.pace_delay_seconds(
+            delay = svc.pace_delay_seconds(
                 rate_limit, int(summary_tpm * 0.85), tpm_limit=summary_tpm, fallback_s=chunk_pause_s
             )
             if delay > 0:
@@ -1126,20 +1133,29 @@ def main() -> int:
         "Uses chunked requests + pauses to reduce 429 rate-limit errors on the free tier.",
     )
     parser.add_argument(
+        "--summary-provider",
+        dest="summary_provider",
+        choices=sorted(_SUMMARY_PROVIDERS),
+        default=os.environ.get("SUMMARY_PROVIDER", "groq"),
+        help="Which LLM provider summarizes: 'groq' (GROQ_API_KEY) or 'gemini' (GEMINI_API_KEY, "
+        "from aistudio.google.com). Default: groq, or the SUMMARY_PROVIDER env var.",
+    )
+    parser.add_argument(
         "--summary-model",
         dest="summary_model",
-        default=groq.SUMMARY_MODEL_DEFAULT,
+        default=None,
         metavar="MODEL_ID",
-        help=f"Groq chat model id (default: {groq.SUMMARY_MODEL_DEFAULT}). Format vendor/model.",
+        help="Primary chat model id. Defaults to the selected provider's default "
+        f"(groq: {groq.SUMMARY_MODEL_DEFAULT}; gemini: {gemini_summary.SUMMARY_MODEL_DEFAULT}).",
     )
     parser.add_argument(
         "--summary-model-fallback",
         dest="summary_model_fallback",
-        default=groq.SUMMARY_MODEL_FALLBACK_DEFAULT,
+        default=None,
         metavar="MODEL_IDS",
-        help=f"Comma-separated fallback chain: if the primary model fails (or hits its daily "
-        f"cap), each chunk is retried with the next model. Each Groq model has its own daily "
-        f"token budget (default: {groq.SUMMARY_MODEL_FALLBACK_DEFAULT}).",
+        help="Comma-separated fallback chain: if the primary model fails (or hits its daily cap), "
+        "each chunk is retried with the next model (each model has its own daily budget). "
+        "Defaults to the selected provider's fallback chain.",
     )
     parser.add_argument(
         "--gemini-max-excerpt-chars",
@@ -1186,10 +1202,10 @@ def main() -> int:
     parser.add_argument(
         "--summary-tpm",
         type=int,
-        default=groq.DEFAULT_TPM_LIMIT,
+        default=None,
         metavar="N",
-        help=f"Tokens-per-minute limit of your Groq tier (default {groq.DEFAULT_TPM_LIMIT}, free tier). "
-        "Each request's input is trimmed so it stays under this cap.",
+        help="Tokens-per-minute limit of your provider tier (default: the provider's free-tier "
+        "value). Each request's input is trimmed so it stays under this cap.",
     )
     parser.add_argument(
         "--gemini-timeout",
@@ -1275,25 +1291,27 @@ def main() -> int:
 
     summary_model_used: str | None = None
     if args.summarize:
-        key = groq.groq_api_key()
+        svc = _SUMMARY_PROVIDERS[args.summary_provider]
+        provider_name = args.summary_provider
+        key = svc.api_key()
         if not key:
-            print(
-                "Error: --summarize requires GROQ_API_KEY in the environment.",
-                file=sys.stderr,
-            )
+            env_var = "GEMINI_API_KEY" if provider_name == "gemini" else "GROQ_API_KEY"
+            print(f"Error: --summarize with provider '{provider_name}' requires {env_var}.", file=sys.stderr)
             return 2
+        model = args.summary_model or svc.SUMMARY_MODEL_DEFAULT
+        model_fallback = args.summary_model_fallback if args.summary_model_fallback is not None else svc.SUMMARY_MODEL_FALLBACK_DEFAULT
         try:
             if not args.gemini_no_fetch_article:
                 print(
-                    "Summaries (Groq): fetching each article page and extracting text for summarization "
+                    f"Summaries ({provider_name}): fetching each article page and extracting text "
                     "(use --gemini-no-fetch-article to use RSS excerpts only).",
                     file=sys.stderr,
                 )
             items, summary_used_fallback = groq_batch_enrich(
                 items,
                 api_key=key,
-                model=args.summary_model,
-                model_fallback=args.summary_model_fallback,
+                model=model,
+                model_fallback=model_fallback,
                 full_article=not args.gemini_no_fetch_article,
                 article_fetch_timeout_s=args.gemini_article_timeout,
                 article_max_bytes=args.gemini_article_max_bytes,
@@ -1306,16 +1324,17 @@ def main() -> int:
                 chunk_pause_s=args.gemini_chunk_pause,
                 max_retries=args.gemini_retries,
                 summary_tpm=args.summary_tpm,
+                svc=svc,
             )
-            summary_model_used = args.summary_model
+            summary_model_used = model
             if summary_used_fallback:
-                summary_model_used = f"{args.summary_model} (fallback used: {args.summary_model_fallback})"
+                summary_model_used = f"{model} (fallback used: {model_fallback})"
             print(
-                f"Groq batch enrichment OK ({summary_model_used}, {len(items)} articles).",
+                f"{provider_name} batch enrichment OK ({summary_model_used}, {len(items)} articles).",
                 file=sys.stderr,
             )
         except Exception as exc:  # noqa: BLE001
-            print(f"Groq batch failed; keeping RSS/heuristic text: {exc}", file=sys.stderr)
+            print(f"{provider_name} batch failed; keeping RSS/heuristic text: {exc}", file=sys.stderr)
 
     if args.html:
         out = Path(args.html)

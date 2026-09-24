@@ -69,13 +69,15 @@ python scripts/fetch_security_news.py --days 7 --limit 25 --summarize --html out
 
 **Free tier / 429 rate limits:** the script defaults to **several small API calls** (`--gemini-chunk-size` default **6** articles) with a **pause between chunks** (`--gemini-chunk-pause`, default **28s**) and **retries** that honor a `Retry-After` header (`--gemini-retries`, default **7**). That reduces spikes in **requests per minute**. Tighten further with `--gemini-chunk-size 4 --gemini-chunk-pause 35 --gemini-max-excerpt-chars 400`.
 
-Default model is **`openai/gpt-oss-120b`** with fallback **`openai/gpt-oss-20b`** (both on Groq's free tier; the older Llama 3.x ids were deprecated mid-2026). Override with **`--summary-model`** / **`--summary-model-fallback`** to any Groq chat model id (`vendor/model`; see the [Groq model list](https://console.groq.com/docs/models)).
+Default model is **`openai/gpt-oss-20b`** with a fallback **chain** **`openai/gpt-oss-120b,qwen/qwen3.8-27b`** (each Groq model has its own daily token budget, so the chain adds headroom). Override with **`--summary-model`** / **`--summary-model-fallback`** (comma-separated) to any Groq chat model id (`vendor/model`; see the [Groq model list](https://console.groq.com/docs/models)).
+
+**Provider choice — Groq or Gemini.** Use **`--summary-provider gemini`** to summarize with **Google Gemini** ([AI Studio](https://aistudio.google.com)) instead of Groq; export **`GEMINI_API_KEY`**. Gemini's free tier is request-bound (not token-bound), so it defaults to **`gemini-3.1-flash-lite`** (15 RPM / 500 RPD, minimal-thinking) with fallback **`gemini-2.5-flash-lite`**, and paces by requests-per-minute. `--summary-provider groq` (default) uses Groq. `--summary-model` / `--summary-tpm` default to the selected provider's own defaults.
 
 Tuning flags (historical `--gemini-*` names, provider-agnostic): **`--gemini-max-excerpt-chars`** (default 480), **`--gemini-max-output-tokens`**, **`--gemini-timeout`**, **`--gemini-chunk-size`** (use **0** for a single request containing every article—higher rate-limit risk on the free tier).
 
 If Groq errors or returns unusable JSON, the script **falls back** to RSS + heuristics and still writes HTML/JSON. Cards that were not AI-summarized (no key, or a per-item Groq failure) are flagged with a **“Not summarized”** badge and their heading reads **“Description (RSS)”** instead of “Summary”, so it’s clear which items show the raw RSS text. The item’s `summarized` boolean is also written to the JSON output.
 
-**GitHub Actions:** add a repository secret **`GROQ_API_KEY`**. The scheduled workflow passes **`--summarize` automatically when the secret is set**; if unset, the build uses RSS + heuristics only (no failure).
+**GitHub Actions:** add a repository secret **`GROQ_API_KEY`** and/or **`GEMINI_API_KEY`**. The scheduled workflows summarize automatically when a key is set — **preferring Gemini when `GEMINI_API_KEY` is present**, else Groq; if neither is set, the build uses RSS + heuristics only (no failure).
 
 ### Browser Read aloud (`output/*.html`)
 

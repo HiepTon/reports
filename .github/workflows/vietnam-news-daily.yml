@@ -65,14 +65,20 @@ jobs:
       - name: Build Vietnam digest (vietnam/index.html)
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           set -e
+          # Prefer Gemini when its key is set, else Groq, else RSS excerpts only.
           SUMMARIZE_FLAG=""
-          if [ -n "${GROQ_API_KEY:-}" ]; then
-            SUMMARIZE_FLAG="--summarize"
-            echo "GROQ_API_KEY set: enabling Groq (Vietnamese summary + category)."
+          PROVIDER_FLAG=""
+          if [ -n "${GEMINI_API_KEY:-}" ]; then
+            SUMMARIZE_FLAG="--summarize"; PROVIDER_FLAG="--summary-provider gemini"
+            echo "GEMINI_API_KEY set: summarizing via Gemini."
+          elif [ -n "${GROQ_API_KEY:-}" ]; then
+            SUMMARIZE_FLAG="--summarize"; PROVIDER_FLAG="--summary-provider groq"
+            echo "GROQ_API_KEY set: summarizing via Groq."
           else
-            echo "GROQ_API_KEY not set: RSS excerpts only, category 'Chưa phân loại'."
+            echo "No summary key set: RSS excerpts only, category 'Chưa phân loại'."
           fi
           mkdir -p site/vietnam
           python scripts/fetch_vietnam_news.py \
@@ -81,7 +87,7 @@ jobs:
             --limit 90 \
             --pause 0.3 \
             --html site/vietnam/index.html \
-            $SUMMARIZE_FLAG
+            $SUMMARIZE_FLAG $PROVIDER_FLAG
 
       - name: Snapshot to archive and rebuild archive index
         run: |
