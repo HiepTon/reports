@@ -81,6 +81,12 @@ def digest_reader_css() -> str:
     .reader-tools .read:disabled, .reader-tools .stop:disabled { opacity: 0.45; cursor: not-allowed; }
     #readStatus { flex: 1 1 12rem; font-size: 0.8rem; color: var(--muted); margin: 0; min-height: 1.2em; }
     #readStatus.err { color: #f0a4a4; }
+    .reader-card-btn {
+      display: inline-block; margin-left: 0.5rem; padding: 0.1rem 0.45rem; vertical-align: middle;
+      font-size: 0.72rem; font-weight: 600; cursor: pointer; border-radius: 5px;
+      border: 1px solid var(--border); background: transparent; color: var(--muted); white-space: nowrap;
+    }
+    .reader-card-btn:hover { border-color: var(--accent); color: var(--accent); }
 """
 
 
@@ -168,6 +174,7 @@ def digest_reader_script(
   var READ_LABEL = LANG === "vi" ? "Đọc tin" : "Read news";
   var resumeIndex = 0;   // where the next "Read" starts (0 = beginning; set after an error/stop)
   var currentIndex = 0;  // item currently being read (for resume + status)
+  var currentRun = null; // the in-flight runRead() promise (null when idle)
   var RATE_STORAGE_KEY = "reportsDigestReaderSpeechRate";
   var RATE_MIN = 0.5;
   var RATE_MAX = 2;
@@ -422,6 +429,7 @@ def digest_reader_script(
       var url = URL.createObjectURL(blob);
       var audio = new Audio(url);
       currentAudio = audio;
+      try {{ audio.playbackRate = getSpeechRate(); }} catch (e) {{}}  // apply speed to EVERY item, not just the first
       var settled = false;
       function finish(err) {{
         if (settled) return;
@@ -480,12 +488,9 @@ def digest_reader_script(
       return;
     }}
 
-    var texts = [];
-    var titles = [];
-    for (var c = 0; c < cards.length; c++) {{
-      var tx = cardText(cards[c]);
-      if (tx && tx.trim()) {{ texts.push(tx); titles.push(cardTitle(cards[c])); }}
-    }}
+    // Index-aligned with visibleCards() so a per-card "read from here" maps 1:1 to texts[].
+    var texts = cards.map(cardText);
+    var titles = cards.map(cardTitle);
     var total = texts.length;
     if (!total) {{
       status(LANG === "vi" ? "Không có nội dung để đọc." : "No readable content.", true);
@@ -551,12 +556,48 @@ def digest_reader_script(
     disposeAllSynths();  // free the Azure websocket immediately on stop
   }}
 
+  // Start reading at a chosen item. If a read is already running, stop it and wait for the
+  // loop to unwind before starting the new one (so the two don't overlap on shared state).
+  async function startFromIndex(idx) {{
+    if (currentRun) {{
+      stopRead();
+      try {{ await currentRun; }} catch (e) {{}}
+    }}
+    resumeIndex = idx > 0 ? idx : 0;
+    currentRun = runRead(idx);
+    currentRun.then(function() {{ currentRun = null; }}, function() {{ currentRun = null; }});
+    return currentRun;
+  }}
+
+  var CARD_BTN_LABEL = LANG === "vi" ? "▶ Đọc từ đây" : "▶ Read from here";
+  function injectCardReadButtons() {{
+    var cards = document.querySelectorAll("article.card");
+    for (var i = 0; i < cards.length; i++) {{
+      (function(card) {{
+        if (card.querySelector(".reader-card-btn")) return;
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "reader-card-btn";
+        btn.textContent = CARD_BTN_LABEL;
+        btn.title = LANG === "vi" ? "Đọc từ bài này trở đi" : "Read from this article onward";
+        btn.addEventListener("click", function() {{
+          var vis = visibleCards();
+          var idx = vis.indexOf(card);
+          if (idx < 0) return;  // hidden by the day filter
+          startFromIndex(idx).catch(function(e) {{ status(String(e), true); }});
+        }});
+        var topic = card.querySelector(".topic");
+        if (topic) topic.appendChild(btn); else card.insertBefore(btn, card.firstChild);
+      }})(cards[i]);
+    }}
+  }}
+
   var r = document.getElementById("readNews");
   var s = document.getElementById("stopRead");
   var saveBtn = document.getElementById("saveReaderApiKey");
   var keyInp = document.getElementById("readerAzureKeyInput");
   var regInp = document.getElementById("readerAzureRegionInput");
-  if (r) r.addEventListener("click", function() {{ runRead(resumeIndex).catch(function(e) {{ status(String(e), true); }}); }});
+  if (r) r.addEventListener("click", function() {{ startFromIndex(resumeIndex).catch(function(e) {{ status(String(e), true); }}); }});
   if (s) s.addEventListener("click", stopRead);
   if (saveBtn) saveBtn.addEventListener("click", persistReaderKeys);
   function onEnter(el) {{
@@ -571,5 +612,6 @@ def digest_reader_script(
   if (spdUp) spdUp.addEventListener("click", function() {{ bumpSpeechRate(RATE_STEP); }});
   refreshSpeechRateUI();
   syncKeyHintOnLoad();
+  injectCardReadButtons();
 }})();
 """
