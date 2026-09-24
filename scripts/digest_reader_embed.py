@@ -164,6 +164,7 @@ def digest_reader_script(
   var KEY_REGION = "reportsDigestReaderAzureRegion";
   var readAborted = false;
   var currentAudio = null;
+  var stopPlayback = null;  // set while audio plays; stopRead() calls it to resolve the play promise
   var READ_LABEL = LANG === "vi" ? "Đọc tin" : "Read news";
   var resumeIndex = 0;   // where the next "Read" starts (0 = beginning; set after an error/stop)
   var currentIndex = 0;  // item currently being read (for resume + status)
@@ -421,11 +422,22 @@ def digest_reader_script(
       var url = URL.createObjectURL(blob);
       var audio = new Audio(url);
       currentAudio = audio;
-      try {{ audio.playbackRate = getSpeechRate(); }} catch (e) {{}}
-      audio.onended = function() {{ URL.revokeObjectURL(url); currentAudio = null; resolve(); }};
-      // A stop() tears down the element and fires 'error'; that's expected, not a failure.
-      audio.onerror = function() {{ URL.revokeObjectURL(url); currentAudio = null; if (readAborted) {{ resolve(); }} else {{ reject(new Error("Audio playback failed.")); }} }};
-      audio.play().catch(function(e) {{ URL.revokeObjectURL(url); currentAudio = null; if (readAborted) {{ resolve(); }} else {{ reject(e); }} }});
+      var settled = false;
+      function finish(err) {{
+        if (settled) return;
+        settled = true;
+        stopPlayback = null;
+        try {{ URL.revokeObjectURL(url); }} catch (e) {{}}
+        currentAudio = null;
+        // A stop() tears down the element (fires 'error'/rejects play) — that's expected, resolve.
+        if (err && !readAborted) {{ reject(err); }} else {{ resolve(); }}
+      }}
+      // stopRead() calls this so the awaiting loop unblocks immediately on "Dừng đọc"
+      // (removing the src does not reliably fire an event, which would hang the read).
+      stopPlayback = function() {{ finish(null); }};
+      audio.onended = function() {{ finish(null); }};
+      audio.onerror = function() {{ finish(new Error("Audio playback failed.")); }};
+      audio.play().catch(function(e) {{ finish(e); }});
     }});
   }}
 
@@ -535,6 +547,7 @@ def digest_reader_script(
       try {{ currentAudio.pause(); currentAudio.removeAttribute("src"); currentAudio.load(); }} catch (e) {{}}
       currentAudio = null;
     }}
+    if (stopPlayback) {{ try {{ stopPlayback(); }} catch (e) {{}} }}  // unblock the awaiting read loop
     disposeAllSynths();  // free the Azure websocket immediately on stop
   }}
 
