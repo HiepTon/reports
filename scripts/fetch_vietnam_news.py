@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Tổng hợp tin RSS từ các báo Việt Nam, tóm tắt và gắn nhóm chủ đề bằng Groq (LLM, tùy chọn).
+Tổng hợp tin RSS từ các báo Việt Nam, tóm tắt và gắn nhóm chủ đề bằng LLM (Groq hoặc Gemini, tùy chọn).
 
 Vietnam news digest: fetch RSS and order by feed sequence in the config file, then newest-first within
 each feed. Because Tuổi Trẻ, Thanh Niên and Dân Trí are listed first in the config, they lead the digest;
@@ -690,7 +690,7 @@ def groq_vietnam_enrich(
         available = [m for m in model_candidates if m not in exhausted_models]
         if not available:
             print(
-                f"Groq: mọi model đã hết hạn mức ngày; giữ trích đoạn RSS từ chunk "
+                f"{svc.DISPLAY_NAME}: mọi model đã hết hạn mức ngày; giữ trích đoạn RSS từ chunk "
                 f"{start}-{end - 1} trở đi.",
                 file=sys.stderr,
             )
@@ -715,12 +715,12 @@ def groq_vietnam_enrich(
                         rate_out=rate_limit,
                     )
                     if not raw_text:
-                        raise RuntimeError("Groq returned empty text.")
+                        raise RuntimeError(f"{svc.DISPLAY_NAME} returned empty text.")
 
                     rows = _parse_gemini_json_list(raw_text)
                     if len(rows) != len(indices):
                         print(
-                            f"Warning: Groq returned {len(rows)} rows for chunk {start}-{end - 1}, "
+                            f"Warning: {svc.DISPLAY_NAME} returned {len(rows)} rows for chunk {start}-{end - 1}, "
                             f"expected {len(indices)}; merging partial.",
                             file=sys.stderr,
                         )
@@ -739,7 +739,7 @@ def groq_vietnam_enrich(
                     if active_model != model_candidates[0]:
                         used_fallback = True
                         print(
-                            f"Groq chunk {start}-{end - 1}: OK (fallback model {active_model!r}).",
+                            f"{svc.DISPLAY_NAME} chunk {start}-{end - 1}: OK (fallback model {active_model!r}).",
                             file=sys.stderr,
                         )
                     break
@@ -751,7 +751,7 @@ def groq_vietnam_enrich(
                         exhausted_models.add(active_model)
                         reason = "hết hạn mức ngày" if svc.is_daily_quota(exc) else "model không khả dụng (404)"
                         print(
-                            f"Groq {reason} ở chunk {start}-{end - 1} (model {active_model!r}: {exc!s}); "
+                            f"{svc.DISPLAY_NAME} {reason} ở chunk {start}-{end - 1} (model {active_model!r}: {exc!s}); "
                             "loại model này khỏi lần chạy.",
                             file=sys.stderr,
                         )
@@ -759,7 +759,7 @@ def groq_vietnam_enrich(
                     if svc.is_transient(exc) and attempt < max_retries - 1:
                         delay = svc.retry_sleep_seconds(exc, attempt)
                         print(
-                            f"Groq lỗi tạm thời; chunk {start}-{end - 1}, chờ {delay:.1f}s "
+                            f"{svc.DISPLAY_NAME} lỗi tạm thời; chunk {start}-{end - 1}, chờ {delay:.1f}s "
                             f"(lần {attempt + 2}/{max_retries}, model={active_model!r}).",
                             file=sys.stderr,
                         )
@@ -768,7 +768,7 @@ def groq_vietnam_enrich(
                     if _is_gemini_json_retryable(exc) and attempt < max_retries - 1:
                         delay = min(5.0 * (1.6**attempt), 90.0)
                         print(
-                            f"Groq JSON lỗi ({exc!s}); chunk {start}-{end - 1}, chờ {delay:.1f}s "
+                            f"{svc.DISPLAY_NAME} JSON lỗi ({exc!s}); chunk {start}-{end - 1}, chờ {delay:.1f}s "
                             f"(lần {attempt + 2}/{max_retries}, max_output_tokens={tokens_this_chunk}).",
                             file=sys.stderr,
                         )
@@ -781,7 +781,7 @@ def groq_vietnam_enrich(
 
             if mi < len(available) - 1:
                 print(
-                    f"Groq chunk {start}-{end - 1}: model {active_model!r} thất bại ({last_err!s}); "
+                    f"{svc.DISPLAY_NAME} chunk {start}-{end - 1}: model {active_model!r} thất bại ({last_err!s}); "
                     f"thử {available[mi + 1]!r}.",
                     file=sys.stderr,
                 )
@@ -792,7 +792,7 @@ def groq_vietnam_enrich(
                 # Tất cả model đã hết hạn mức ngày — các chunk sau cũng sẽ lỗi.
                 # Giữ trích đoạn RSS cho phần còn lại thay vì làm hỏng cả bản build.
                 print(
-                    f"Groq hết hạn mức ngày ở chunk {start}-{end - 1}; giữ trích đoạn RSS "
+                    f"{svc.DISPLAY_NAME} hết hạn mức ngày ở chunk {start}-{end - 1}; giữ trích đoạn RSS "
                     "cho các bài còn lại.",
                     file=sys.stderr,
                 )
@@ -800,7 +800,7 @@ def groq_vietnam_enrich(
             # Một chunk lỗi trên mọi model (vd: trả về rỗng): chỉ giữ trích đoạn RSS cho
             # các bài này rồi tiếp tục — không bao giờ vứt bỏ các chunk đã tóm tắt thành công.
             print(
-                f"Groq chunk {start}-{end - 1}: mọi model đều lỗi ({last_err!s}); "
+                f"{svc.DISPLAY_NAME} chunk {start}-{end - 1}: mọi model đều lỗi ({last_err!s}); "
                 f"giữ trích đoạn RSS cho {len(indices)} bài này và tiếp tục.",
                 file=sys.stderr,
             )
@@ -862,6 +862,7 @@ def build_html(
     generated_at: datetime | None = None,
     server_days: int | None = None,
     summary_model: str | None = None,
+    summary_provider: str = "Groq",
     summary_article_pages: bool = False,
     read_news_azure_voice: str = READ_NEWS_AZURE_VOICE_VI_DEFAULT,
     read_news_azure_voice_fallback: str = READ_NEWS_AZURE_VOICE_FALLBACK_VI_DEFAULT,
@@ -877,12 +878,12 @@ def build_html(
     if summary_model:
         if summary_article_pages:
             ai_note = (
-                f"Tóm tắt và nhóm chủ đề: Groq ({summary_model}), theo văn bản trích từ trang bài báo "
+                f"Tóm tắt và nhóm chủ đề: {summary_provider} ({summary_model}), theo văn bản trích từ trang bài báo "
                 f"(không chỉ RSS). Tin Tuổi Trẻ (tuoitre.vn) hiển thị trước trong mục tin nổi bật."
             )
         else:
             ai_note = (
-                f"Tóm tắt và nhóm chủ đề: Groq ({summary_model}), theo đoạn RSS. "
+                f"Tóm tắt và nhóm chủ đề: {summary_provider} ({summary_model}), theo đoạn RSS. "
                 f"Tin Tuổi Trẻ (tuoitre.vn) hiển thị trước trong mục tin nổi bật."
             )
     else:
@@ -1215,6 +1216,7 @@ def main() -> int:
                 items,
                 server_days=server_days,
                 summary_model=summary_model_used,
+                summary_provider=_SUMMARY_PROVIDERS[args.summary_provider].DISPLAY_NAME,
                 summary_article_pages=bool(summary_model_used) and not args.gemini_no_fetch_article,
                 read_news_azure_voice=args.read_news_azure_voice,
                 read_news_azure_voice_fallback=args.read_news_azure_voice_fallback,

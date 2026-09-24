@@ -450,9 +450,9 @@ def groq_batch_enrich(
     svc=groq,  # summary provider module (groq_summary or gemini_summary)
 ) -> tuple[list[NewsItem], bool]:
     """
-    Rewrite summaries/analysis via Groq (OpenAI-compatible chat completions) using chunked
-    requests and pauses to respect free-tier requests-per-minute, with retries on transient
-    errors (429/5xx), then an optional fallback model per chunk.
+    Rewrite summaries/analysis via the selected provider (`svc`: Groq or Gemini) using chunked
+    requests and adaptive pacing to respect free-tier limits, with retries on transient errors
+    (429/5xx) and a fallback model chain per chunk.
     """
     if not items:
         return items, False
@@ -533,7 +533,7 @@ def groq_batch_enrich(
         available = [m for m in model_candidates if m not in exhausted_models]
         if not available:
             print(
-                f"Groq: all models hit their daily cap; keeping RSS excerpts from chunk "
+                f"{svc.DISPLAY_NAME}: all models hit their daily cap; keeping RSS excerpts from chunk "
                 f"{start}-{end - 1} onward.",
                 file=sys.stderr,
             )
@@ -557,12 +557,12 @@ def groq_batch_enrich(
                         rate_out=rate_limit,
                     )
                     if not raw_text:
-                        raise RuntimeError("Groq returned empty text.")
+                        raise RuntimeError(f"{svc.DISPLAY_NAME} returned empty text.")
 
                     rows = _parse_gemini_json_list(raw_text)
                     if len(rows) != len(indices):
                         print(
-                            f"Warning: Groq returned {len(rows)} rows for chunk indices {start}-{end - 1}, "
+                            f"Warning: {svc.DISPLAY_NAME} returned {len(rows)} rows for chunk indices {start}-{end - 1}, "
                             f"expected {len(indices)}; merging partial results.",
                             file=sys.stderr,
                         )
@@ -572,7 +572,7 @@ def groq_batch_enrich(
                     if active_model != model_candidates[0]:
                         used_fallback = True
                         print(
-                            f"Groq chunk {start}-{end - 1}: OK using fallback model {active_model!r}.",
+                            f"{svc.DISPLAY_NAME} chunk {start}-{end - 1}: OK using fallback model {active_model!r}.",
                             file=sys.stderr,
                         )
                     break
@@ -584,7 +584,7 @@ def groq_batch_enrich(
                         exhausted_models.add(active_model)
                         reason = "daily quota hit" if svc.is_daily_quota(exc) else "model unavailable (404)"
                         print(
-                            f"Groq {reason} on chunk {start}-{end - 1} with model {active_model!r} "
+                            f"{svc.DISPLAY_NAME} {reason} on chunk {start}-{end - 1} with model {active_model!r} "
                             f"({exc!s}); retiring it for this run.",
                             file=sys.stderr,
                         )
@@ -592,7 +592,7 @@ def groq_batch_enrich(
                     if svc.is_transient(exc) and attempt < max_retries - 1:
                         delay = svc.retry_sleep_seconds(exc, attempt)
                         print(
-                            f"Groq transient error on chunk {start}-{end - 1} ({exc!s}); sleeping {delay:.1f}s "
+                            f"{svc.DISPLAY_NAME} transient error on chunk {start}-{end - 1} ({exc!s}); sleeping {delay:.1f}s "
                             f"(retry {attempt + 2}/{max_retries}, model={active_model!r}).",
                             file=sys.stderr,
                         )
@@ -603,7 +603,7 @@ def groq_batch_enrich(
                     if ("empty text" in msg or "returned empty" in msg or isinstance(exc, json.JSONDecodeError)) and attempt < max_retries - 1:
                         delay = min(5.0 * (1.6**attempt), 60.0)
                         print(
-                            f"Groq empty/malformed response on chunk {start}-{end - 1}; sleeping {delay:.1f}s "
+                            f"{svc.DISPLAY_NAME} empty/malformed response on chunk {start}-{end - 1}; sleeping {delay:.1f}s "
                             f"(retry {attempt + 2}/{max_retries}, model={active_model!r}).",
                             file=sys.stderr,
                         )
@@ -616,7 +616,7 @@ def groq_batch_enrich(
 
             if mi < len(available) - 1:
                 print(
-                    f"Groq chunk {start}-{end - 1}: model {active_model!r} failed ({last_err!s}); "
+                    f"{svc.DISPLAY_NAME} chunk {start}-{end - 1}: model {active_model!r} failed ({last_err!s}); "
                     f"retrying with {available[mi + 1]!r}.",
                     file=sys.stderr,
                 )
@@ -627,7 +627,7 @@ def groq_batch_enrich(
                 # All models are out of daily budget — remaining chunks would fail too.
                 # Keep RSS excerpts for this and later chunks instead of crashing.
                 print(
-                    f"Groq daily quota exhausted at chunk {start}-{end - 1}; keeping RSS excerpts "
+                    f"{svc.DISPLAY_NAME} daily quota exhausted at chunk {start}-{end - 1}; keeping RSS excerpts "
                     "for the remaining articles.",
                     file=sys.stderr,
                 )
@@ -635,7 +635,7 @@ def groq_batch_enrich(
             # One chunk failed on every model (e.g. an empty response): keep RSS excerpts for
             # just these articles and continue — never discard the chunks that did summarize.
             print(
-                f"Groq chunk {start}-{end - 1}: all models failed ({last_err!s}); "
+                f"{svc.DISPLAY_NAME} chunk {start}-{end - 1}: all models failed ({last_err!s}); "
                 f"keeping RSS excerpts for these {len(indices)} article(s) and continuing.",
                 file=sys.stderr,
             )
@@ -855,6 +855,7 @@ def build_html(
     generated_at: datetime | None = None,
     server_days: int | None = None,
     summary_model: str | None = None,
+    summary_provider: str = "Groq",
     summary_article_pages: bool = False,
     read_news_azure_voice: str = READ_NEWS_AZURE_VOICE_EN_DEFAULT,
     read_news_azure_voice_fallback: str = READ_NEWS_AZURE_VOICE_FALLBACK_EN_DEFAULT,
@@ -870,12 +871,12 @@ def build_html(
     if summary_model:
         if summary_article_pages:
             summary_note = (
-                f"Summaries and analysis were generated by Groq ({summary_model}) from plain text "
+                f"Summaries and analysis were generated by {summary_provider} ({summary_model}) from plain text "
                 f"extracted from each article page (not only RSS snippets); verify critical facts against the source."
             )
         else:
             summary_note = (
-                f"Summaries and analysis were generated by Groq ({summary_model}) from RSS excerpts only; "
+                f"Summaries and analysis were generated by {summary_provider} ({summary_model}) from RSS excerpts only; "
                 f"verify critical facts against the original article."
             )
     else:
@@ -1349,6 +1350,7 @@ def main() -> int:
                 items,
                 server_days=server_days,
                 summary_model=summary_model_used,
+                summary_provider=_SUMMARY_PROVIDERS[args.summary_provider].DISPLAY_NAME,
                 summary_article_pages=bool(summary_model_used) and not args.gemini_no_fetch_article,
                 read_news_azure_voice=args.read_news_azure_voice,
                 read_news_azure_voice_fallback=args.read_news_azure_voice_fallback,

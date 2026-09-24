@@ -31,6 +31,7 @@ GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{mode
 # Free-tier chat models (verified 2026-09). gemini-3.1-flash-lite: 15 RPM / 500 RPD, defaults
 # to "minimal" thinking (fast + cheap, ideal for extraction). Fallback gemini-2.5-flash-lite
 # has its own separate daily quota. Both share ~250K TPM. IDs churn — override with --summary-model.
+DISPLAY_NAME = "Gemini"
 SUMMARY_MODEL_DEFAULT = "gemini-3.1-flash-lite"
 SUMMARY_MODEL_FALLBACK_DEFAULT = "gemini-2.5-flash-lite"
 DEFAULT_RPM_LIMIT = 15        # gemini-3.1-flash-lite free tier (the primary)

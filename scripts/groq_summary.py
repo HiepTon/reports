@@ -24,6 +24,7 @@ DEFAULT_RPM_LIMIT = 30
 # Each model has its OWN 200K-tokens/day (TPD) free budget, so a comma-separated fallback
 # CHAIN multiplies daily headroom: when one model's daily cap is hit, move to the next.
 # 20b is the primary (fastest); 120b then qwen3-32b are fallbacks (qwen is preview-tier).
+DISPLAY_NAME = "Groq"
 SUMMARY_MODEL_DEFAULT = "openai/gpt-oss-20b"
 SUMMARY_MODEL_FALLBACK_DEFAULT = "openai/gpt-oss-120b,qwen/qwen3.8-27b"
 # Small chunks: the free-tier 8K TPM only fits a few articles' worth per request.
