@@ -26,6 +26,9 @@ DEFAULT_RPM_LIMIT = 30
 # 20b is the primary (fastest); 120b then qwen3-32b are fallbacks (qwen is preview-tier).
 SUMMARY_MODEL_DEFAULT = "openai/gpt-oss-20b"
 SUMMARY_MODEL_FALLBACK_DEFAULT = "openai/gpt-oss-120b,qwen/qwen3.8-27b"
+# Small chunks: the free-tier 8K TPM only fits a few articles' worth per request.
+DEFAULT_CHUNK_SIZE = 3
+DEFAULT_MAX_OUTPUT_TOKENS = 2048
 
 # api.groq.com sits behind Cloudflare, which returns "Error 1010: browser_signature_banned"
 # for the default urllib User-Agent (Python-urllib/x.y). Send a normal browser UA instead.

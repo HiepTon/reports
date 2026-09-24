@@ -807,10 +807,11 @@ def groq_vietnam_enrich(
             continue
 
         if end < n:
-            # Giãn nhịp theo bucket TPM trực tiếp thay vì chờ cố định: chỉ chờ đủ để request
-            # kế tiếp (cỡ ~đầy) vừa với hạn mức.
+            # Giãn nhịp theo kích thước token thực của request (len(prompt) ~= chars/2 + output)
+            # để không vượt TPM dù chunk nhỏ (Groq) hay lớn (Gemini).
+            est_req_tokens = int(len(prompt) / 2) + out_tokens
             delay = svc.pace_delay_seconds(
-                rate_limit, int(summary_tpm * 0.85), tpm_limit=summary_tpm, fallback_s=chunk_pause_s
+                rate_limit, est_req_tokens, tpm_limit=summary_tpm, fallback_s=chunk_pause_s
             )
             if delay > 0:
                 time.sleep(delay)
@@ -1105,10 +1106,10 @@ def main() -> int:
     parser.add_argument("--gemini-article-max-bytes", type=int, default=2_500_000, metavar="N", help="Giới hạn bytes HTML mỗi bài.")
     parser.add_argument("--gemini-article-fetch-pause", type=float, default=0.35, help="Giây nghỉ giữa các lần tải trang (lịch sự).")
     parser.add_argument("--gemini-max-article-chars", type=int, default=6_000, help="Tối đa ký tự plain text/bài gửi model (còn bị cắt thêm để vừa --summary-tpm).")
-    parser.add_argument("--gemini-max-output-tokens", type=int, default=2048)
+    parser.add_argument("--gemini-max-output-tokens", type=int, default=None, help="Tokens output tối đa mỗi request (mặc định theo provider; lớn hơn cho Gemini để đủ chỗ cho nhiều tóm tắt).")
     parser.add_argument("--summary-tpm", type=int, default=None, metavar="N", help="Giới hạn tokens/phút của gói (mặc định theo provider). Input mỗi request bị cắt để không vượt.")
     parser.add_argument("--gemini-timeout", type=int, default=180)
-    parser.add_argument("--gemini-chunk-size", type=int, default=3)
+    parser.add_argument("--gemini-chunk-size", type=int, default=None, help="Số bài mỗi request (mặc định theo provider — 3 cho Groq 8K TPM, lớn hơn cho Gemini 250K TPM). Dùng 0 để gộp tất cả vào 1 request.")
     parser.add_argument("--gemini-chunk-pause", type=float, default=45.0)
     parser.add_argument("--gemini-retries", type=int, default=7)
     parser.add_argument(
@@ -1171,6 +1172,8 @@ def main() -> int:
             return 2
         model = args.summary_model or svc.SUMMARY_MODEL_DEFAULT
         model_fallback = args.summary_model_fallback if args.summary_model_fallback is not None else svc.SUMMARY_MODEL_FALLBACK_DEFAULT
+        chunk_size = args.gemini_chunk_size if args.gemini_chunk_size is not None else svc.DEFAULT_CHUNK_SIZE
+        max_output_tokens = args.gemini_max_output_tokens if args.gemini_max_output_tokens is not None else svc.DEFAULT_MAX_OUTPUT_TOKENS
         try:
             if not args.gemini_no_fetch_article:
                 print(
@@ -1189,9 +1192,9 @@ def main() -> int:
                 article_fetch_pause_s=args.gemini_article_fetch_pause,
                 max_article_chars=args.gemini_max_article_chars,
                 max_excerpt_chars=args.gemini_max_excerpt_chars,
-                max_output_tokens=args.gemini_max_output_tokens,
+                max_output_tokens=max_output_tokens,
                 request_timeout_s=args.gemini_timeout,
-                chunk_size=args.gemini_chunk_size,
+                chunk_size=chunk_size,
                 chunk_pause_s=args.gemini_chunk_pause,
                 max_retries=args.gemini_retries,
                 summary_tpm=args.summary_tpm,

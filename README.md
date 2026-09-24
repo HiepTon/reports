@@ -67,7 +67,7 @@ export GROQ_API_KEY="your-key"
 python scripts/fetch_security_news.py --days 7 --limit 25 --summarize --html output/index.html
 ```
 
-**Free tier / 429 rate limits:** the script defaults to **several small API calls** (`--gemini-chunk-size` default **6** articles) with a **pause between chunks** (`--gemini-chunk-pause`, default **28s**) and **retries** that honor a `Retry-After` header (`--gemini-retries`, default **7**). That reduces spikes in **requests per minute**. Tighten further with `--gemini-chunk-size 4 --gemini-chunk-pause 35 --gemini-max-excerpt-chars 400`.
+**Free tier / rate limits:** requests are chunked and **paced adaptively** to stay under the provider's limits, plus **retries** that honor a `Retry-After`/`retryDelay` header (`--gemini-retries`, default **7**). `--gemini-chunk-size` defaults **per provider**: **3** for Groq (its 8K TPM only fits a few articles/request) and **12** for Gemini (its 250K TPM lets many items be **merged into one request** — far fewer requests, less RPD used). Pacing is TPM-aware, so bigger Gemini chunks stay under the cap; the token-bound floor (total tokens ÷ TPM) means Gemini (250K TPM) is ~8–10× faster than Groq (8K TPM) for the same articles. To go faster still, cut tokens with `--gemini-no-fetch-article` (RSS only) or a smaller `--gemini-max-article-chars`.
 
 Default model is **`openai/gpt-oss-20b`** with a fallback **chain** **`openai/gpt-oss-120b,qwen/qwen3.8-27b`** (each Groq model has its own daily token budget, so the chain adds headroom). Override with **`--summary-model`** / **`--summary-model-fallback`** (comma-separated) to any Groq chat model id (`vendor/model`; see the [Groq model list](https://console.groq.com/docs/models)).
 

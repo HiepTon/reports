@@ -642,10 +642,11 @@ def groq_batch_enrich(
             continue
 
         if end < n:
-            # Pace the next request off the live TPM bucket instead of a blind fixed wait:
-            # wait only long enough for the next ~full-size request to fit under the cap.
+            # Pace off the request's real token size (len(prompt) ~= chars/2, plus output) so
+            # we stay under the TPM cap whether chunks are small (Groq) or large (Gemini).
+            est_req_tokens = int(len(prompt) / 2) + out_tokens
             delay = svc.pace_delay_seconds(
-                rate_limit, int(summary_tpm * 0.85), tpm_limit=summary_tpm, fallback_s=chunk_pause_s
+                rate_limit, est_req_tokens, tpm_limit=summary_tpm, fallback_s=chunk_pause_s
             )
             if delay > 0:
                 time.sleep(delay)
@@ -1196,8 +1197,9 @@ def main() -> int:
     parser.add_argument(
         "--gemini-max-output-tokens",
         type=int,
-        default=2048,
-        help="Max output tokens per chunk response (covers gpt-oss reasoning + the JSON).",
+        default=None,
+        help="Max output tokens per chunk response (default: the provider's default; larger for "
+        "Gemini so merged chunks have room for every summary).",
     )
     parser.add_argument(
         "--summary-tpm",
@@ -1216,9 +1218,10 @@ def main() -> int:
     parser.add_argument(
         "--gemini-chunk-size",
         type=int,
-        default=3,
+        default=None,
         metavar="N",
-        help="Articles per request (smaller reduces per-request tokens). Use 0 for one request for all.",
+        help="Articles per request (default: provider's default — 3 for Groq's 8K TPM, larger for "
+        "Gemini's 250K TPM). Use 0 for one request for all.",
     )
     parser.add_argument(
         "--gemini-chunk-pause",
@@ -1300,6 +1303,8 @@ def main() -> int:
             return 2
         model = args.summary_model or svc.SUMMARY_MODEL_DEFAULT
         model_fallback = args.summary_model_fallback if args.summary_model_fallback is not None else svc.SUMMARY_MODEL_FALLBACK_DEFAULT
+        chunk_size = args.gemini_chunk_size if args.gemini_chunk_size is not None else svc.DEFAULT_CHUNK_SIZE
+        max_output_tokens = args.gemini_max_output_tokens if args.gemini_max_output_tokens is not None else svc.DEFAULT_MAX_OUTPUT_TOKENS
         try:
             if not args.gemini_no_fetch_article:
                 print(
@@ -1318,9 +1323,9 @@ def main() -> int:
                 article_fetch_pause_s=args.gemini_article_fetch_pause,
                 max_article_chars=args.gemini_max_article_chars,
                 max_excerpt_chars=args.gemini_max_excerpt_chars,
-                max_output_tokens=args.gemini_max_output_tokens,
+                max_output_tokens=max_output_tokens,
                 request_timeout_s=args.gemini_timeout,
-                chunk_size=args.gemini_chunk_size,
+                chunk_size=chunk_size,
                 chunk_pause_s=args.gemini_chunk_pause,
                 max_retries=args.gemini_retries,
                 summary_tpm=args.summary_tpm,

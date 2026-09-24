@@ -35,6 +35,10 @@ SUMMARY_MODEL_DEFAULT = "gemini-3.1-flash-lite"
 SUMMARY_MODEL_FALLBACK_DEFAULT = "gemini-2.5-flash-lite"
 DEFAULT_RPM_LIMIT = 15        # gemini-3.1-flash-lite free tier (the primary)
 DEFAULT_TPM_LIMIT = 250000    # generous; input is capped by --gemini-max-article-chars anyway
+# High TPM lets us merge many items per request (fewer requests → fewer RPD + less overhead);
+# the big output budget leaves room for that many summaries in one response.
+DEFAULT_CHUNK_SIZE = 12
+DEFAULT_MAX_OUTPUT_TOKENS = 8192
 
 
 class GeminiError(RuntimeError):
@@ -95,8 +99,15 @@ def pace_delay_seconds(
     buffer_s: float = 0.5,
     fallback_s: float = 0.0,
 ) -> float:
-    """Gemini free tier is RPM/RPD-bound (TPM is generous), so pace by requests-per-minute."""
-    return 60.0 / max(1, rpm_limit) + buffer_s
+    """Wait enough to respect BOTH the RPM cap and the TPM cap.
+
+    Gemini returns no per-response token headers, so we estimate: the per-request floor is
+    60/RPM, and a request of N tokens needs ~60*N/TPM seconds to refill under the TPM budget.
+    Merging many items into one request raises N (so tpm_gap grows) but cuts the request count.
+    """
+    rpm_gap = 60.0 / max(1, rpm_limit)
+    tpm_gap = 60.0 * max(0, next_request_tokens) / max(1, tpm_limit)
+    return max(rpm_gap, tpm_gap) + buffer_s
 
 
 def chat_text(
