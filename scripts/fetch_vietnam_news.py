@@ -738,12 +738,13 @@ def groq_vietnam_enrich(
                     break
                 except Exception as exc:  # noqa: BLE001 — retry transient/JSON, else next model
                     last_err = exc
-                    if groq.is_daily_quota(exc):
-                        # Hạn mức token/ngày: chờ cũng vô ích. Loại model này khỏi lần chạy và
-                        # chuyển sang model kế tiếp (mỗi model có hạn mức ngày riêng).
+                    if groq.is_daily_quota(exc) or groq.is_model_unavailable(exc):
+                        # Hết hạn mức ngày (không hồi) hoặc model 404/không khả dụng: loại model
+                        # này khỏi lần chạy và chuyển sang model kế tiếp.
                         exhausted_models.add(active_model)
+                        reason = "hết hạn mức ngày" if groq.is_daily_quota(exc) else "model không khả dụng (404)"
                         print(
-                            f"Groq hết hạn mức ngày ở chunk {start}-{end - 1} (model {active_model!r}: {exc!s}); "
+                            f"Groq {reason} ở chunk {start}-{end - 1} (model {active_model!r}: {exc!s}); "
                             "loại model này khỏi lần chạy.",
                             file=sys.stderr,
                         )

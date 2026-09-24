@@ -571,12 +571,13 @@ def groq_batch_enrich(
                     break
                 except Exception as exc:  # noqa: BLE001 — retry transient, else fall through to next model
                     last_err = exc
-                    if groq.is_daily_quota(exc):
-                        # Daily token/request cap: sleeping won't refill it. Retire this model
-                        # for the rest of the run and try the next (separate daily budget).
+                    if groq.is_daily_quota(exc) or groq.is_model_unavailable(exc):
+                        # Daily cap (won't refill) or a 404/unavailable model id: retire this
+                        # model for the rest of the run and fall through to the next candidate.
                         exhausted_models.add(active_model)
+                        reason = "daily quota hit" if groq.is_daily_quota(exc) else "model unavailable (404)"
                         print(
-                            f"Groq daily quota hit on chunk {start}-{end - 1} with model {active_model!r} "
+                            f"Groq {reason} on chunk {start}-{end - 1} with model {active_model!r} "
                             f"({exc!s}); retiring it for this run.",
                             file=sys.stderr,
                         )

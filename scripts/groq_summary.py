@@ -25,7 +25,7 @@ DEFAULT_RPM_LIMIT = 30
 # CHAIN multiplies daily headroom: when one model's daily cap is hit, move to the next.
 # 20b is the primary (fastest); 120b then qwen3-32b are fallbacks (qwen is preview-tier).
 SUMMARY_MODEL_DEFAULT = "openai/gpt-oss-20b"
-SUMMARY_MODEL_FALLBACK_DEFAULT = "openai/gpt-oss-120b,qwen/qwen3-32b"
+SUMMARY_MODEL_FALLBACK_DEFAULT = "openai/gpt-oss-120b,qwen/qwen3.8-27b"
 
 # api.groq.com sits behind Cloudflare, which returns "Error 1010: browser_signature_banned"
 # for the default urllib User-Agent (Python-urllib/x.y). Send a normal browser UA instead.
@@ -148,6 +148,18 @@ def is_daily_quota(exc: BaseException) -> bool:
         return False
     msg = str(exc).lower()
     return any(s in msg for s in ("per day", "tpd", "rpd", "tokens per day", "requests per day"))
+
+
+def is_model_unavailable(exc: BaseException) -> bool:
+    """404 / model_not_found — a bad, removed, or access-restricted model id.
+
+    Like a daily cap, this won't fix itself within the run, so callers should retire the
+    model and move to the next candidate rather than re-trying it on every chunk.
+    """
+    if getattr(exc, "status", None) == 404:
+        return True
+    msg = str(exc).lower()
+    return "model_not_found" in msg or "does not exist" in msg or "do not have access" in msg
 
 
 def is_transient(exc: BaseException) -> bool:
