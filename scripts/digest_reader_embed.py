@@ -164,6 +164,9 @@ def digest_reader_script(
   var KEY_REGION = "reportsDigestReaderAzureRegion";
   var readAborted = false;
   var currentAudio = null;
+  var READ_LABEL = LANG === "vi" ? "Đọc tin" : "Read news";
+  var resumeIndex = 0;   // where the next "Read" starts (0 = beginning; set after an error/stop)
+  var currentIndex = 0;  // item currently being read (for resume + status)
   var RATE_STORAGE_KEY = "reportsDigestReaderSpeechRate";
   var RATE_MIN = 0.5;
   var RATE_MAX = 2;
@@ -296,9 +299,12 @@ def digest_reader_script(
   function visibleCards() {{
     return Array.prototype.slice.call(document.querySelectorAll("article.card")).filter(function(c) {{ return !c.hidden; }});
   }}
-  function cardText(card) {{
+  function cardTitle(card) {{
     var ta = card.querySelector(".topic a");
-    var title = ta ? ta.textContent.trim() : "";
+    return ta ? ta.textContent.trim() : "";
+  }}
+  function cardText(card) {{
+    var title = cardTitle(card);
     var blocks = card.querySelectorAll(".block p");
     var chunks = [];
     for (var i = 0; i < blocks.length; i++) chunks.push(blocks[i].textContent.trim());
@@ -380,17 +386,20 @@ def digest_reader_script(
     return /1006|Unable to contact server|websocket|connection\\s|connection\\.|timed out|timeout|network/i.test(m);
   }}
   // Retry the SAME voice on transient connection drops (e.g. wss 1006) before giving up.
+  // Backoff grows (1s, 2s, 4s, 6s) to ride through short Azure outages rather than aborting.
+  var SYNTH_RETRIES = 5;
+  var SYNTH_BACKOFF_MS = [1000, 2000, 4000, 6000];
   async function synthWithRetry(key, region, text, voiceId) {{
     var lastErr;
-    for (var attempt = 0; attempt < 3; attempt++) {{
+    for (var attempt = 0; attempt < SYNTH_RETRIES; attempt++) {{
       if (readAborted) throw new Error("aborted");
       try {{
         return await synthOnce(key, region, text, voiceId);
       }} catch (e) {{
         lastErr = e;
-        if (!isTransientErr(e) || attempt === 2) throw e;
+        if (!isTransientErr(e) || attempt === SYNTH_RETRIES - 1) throw e;
         console.warn("Reader TTS: transient failure, retrying (" + (attempt + 1) + ")", e);
-        await sleep(600 * (attempt + 1));
+        await sleep(SYNTH_BACKOFF_MS[Math.min(attempt, SYNTH_BACKOFF_MS.length - 1)]);
       }}
     }}
     throw lastErr;
@@ -414,12 +423,31 @@ def digest_reader_script(
       currentAudio = audio;
       try {{ audio.playbackRate = getSpeechRate(); }} catch (e) {{}}
       audio.onended = function() {{ URL.revokeObjectURL(url); currentAudio = null; resolve(); }};
-      audio.onerror = function() {{ URL.revokeObjectURL(url); currentAudio = null; reject(new Error("Audio playback failed.")); }};
-      audio.play().catch(function(e) {{ URL.revokeObjectURL(url); currentAudio = null; reject(e); }});
+      // A stop() tears down the element and fires 'error'; that's expected, not a failure.
+      audio.onerror = function() {{ URL.revokeObjectURL(url); currentAudio = null; if (readAborted) {{ resolve(); }} else {{ reject(new Error("Audio playback failed.")); }} }};
+      audio.play().catch(function(e) {{ URL.revokeObjectURL(url); currentAudio = null; if (readAborted) {{ resolve(); }} else {{ reject(e); }} }});
     }});
   }}
 
-  async function runRead() {{
+  function setReadingUI(reading) {{
+    var readBtn = document.getElementById("readNews");
+    var stopBtn = document.getElementById("stopRead");
+    if (readBtn) readBtn.disabled = reading;
+    if (stopBtn) stopBtn.disabled = !reading;
+  }}
+  function updateReadButtonLabel() {{
+    var readBtn = document.getElementById("readNews");
+    if (!readBtn) return;
+    readBtn.textContent = resumeIndex > 0
+      ? (LANG === "vi" ? "Đọc tiếp (mục " : "Continue (item ") + (resumeIndex + 1) + ")"
+      : READ_LABEL;
+  }}
+  function itemLabel(j, total, title) {{
+    var t = title ? ": " + (title.length > 80 ? title.slice(0, 79) + "…" : title) : "";
+    return (j + 1) + "/" + total + t;
+  }}
+
+  async function runRead(startIndex) {{
     readAborted = false;
     var cards = visibleCards();
     if (!cards.length) {{
@@ -440,54 +468,74 @@ def digest_reader_script(
       return;
     }}
 
-    var readBtn = document.getElementById("readNews");
-    var stopBtn = document.getElementById("stopRead");
-    if (readBtn) readBtn.disabled = true;
-    if (stopBtn) stopBtn.disabled = false;
+    var texts = [];
+    var titles = [];
+    for (var c = 0; c < cards.length; c++) {{
+      var tx = cardText(cards[c]);
+      if (tx && tx.trim()) {{ texts.push(tx); titles.push(cardTitle(cards[c])); }}
+    }}
+    var total = texts.length;
+    if (!total) {{
+      status(LANG === "vi" ? "Không có nội dung để đọc." : "No readable content.", true);
+      return;
+    }}
+    var start = Math.min(Math.max(parseInt(startIndex, 10) || 0, 0), total - 1);
+
+    setReadingUI(true);
     if (currentAudio) {{ try {{ currentAudio.pause(); }} catch (e) {{}} currentAudio = null; }}
 
-    var texts = cards.map(cardText).filter(function(t) {{ return t && t.trim(); }});
     var prefetch = null;
+    var j = start;
     try {{
-      prefetch = synth(key, region, texts[0]);
-      for (var j = 0; j < texts.length; j++) {{
+      prefetch = synth(key, region, texts[start]);
+      for (j = start; j < total; j++) {{
         if (readAborted) break;
-        status((LANG === "vi" ? "Đang tạo giọng (Azure)… " : "Synthesizing speech (Azure)… ") + (j + 1) + "/" + texts.length);
+        currentIndex = j;
+        status((LANG === "vi" ? "Đang đọc " : "Reading ") + itemLabel(j, total, titles[j]));
         var buf = await prefetch;
         if (readAborted) break;
-        prefetch = (j + 1 < texts.length) ? synth(key, region, texts[j + 1]) : null;
+        prefetch = (j + 1 < total) ? synth(key, region, texts[j + 1]) : null;
         await playMp3Buffer(buf);
       }}
     }} catch (e) {{
-      status(String(e && e.message ? e.message : e), true);
-      if (readBtn) readBtn.disabled = false;
-      if (stopBtn) stopBtn.disabled = true;
       swallow(prefetch); disposeAllSynths();
+      if (readAborted) {{
+        resumeIndex = currentIndex;
+        status((LANG === "vi" ? "Đã dừng ở mục " : "Stopped at item ") + itemLabel(currentIndex, total, titles[currentIndex]) +
+          (LANG === "vi" ? " — bấm Đọc tiếp để tiếp tục." : " — click Continue to resume."), false);
+      }} else {{
+        resumeIndex = j;  // remember the failed item so the user can retry from here
+        status((LANG === "vi" ? "Lỗi ở mục " : "Error at item ") + itemLabel(j, total, titles[j]) + " — " +
+          String(e && e.message ? e.message : e) + " " +
+          (LANG === "vi" ? "Bấm \\u201cĐọc tiếp\\u201d để đọc lại từ mục này." : "Click \\u201cContinue\\u201d to retry from this item."), true);
+      }}
+      setReadingUI(false);
+      updateReadButtonLabel();
       return;
     }}
 
     swallow(prefetch); disposeAllSynths();
     if (readAborted) {{
-      status(LANG === "vi" ? "Đã hủy." : "Cancelled.", false);
+      resumeIndex = currentIndex;  // resume from where the user stopped
+      status((LANG === "vi" ? "Đã dừng ở mục " : "Stopped at item ") + itemLabel(currentIndex, total, titles[currentIndex]) +
+        (LANG === "vi" ? " — bấm Đọc tiếp để tiếp tục." : " — click Continue to resume."), false);
     }} else {{
+      resumeIndex = 0;  // finished the whole list — next read starts from the top
       status(LANG === "vi" ? "Đã đọc xong." : "Finished reading.", false);
     }}
-    if (readBtn) readBtn.disabled = false;
-    if (stopBtn) stopBtn.disabled = true;
+    setReadingUI(false);
+    updateReadButtonLabel();
   }}
 
   function stopRead() {{
+    // Just signal the abort + tear down audio; runRead's loop reports the stop point,
+    // sets resumeIndex, and restores the buttons (so "Đọc tiếp" resumes from here).
     readAborted = true;
     if (currentAudio) {{
       try {{ currentAudio.pause(); currentAudio.removeAttribute("src"); currentAudio.load(); }} catch (e) {{}}
       currentAudio = null;
     }}
     disposeAllSynths();  // free the Azure websocket immediately on stop
-    status(LANG === "vi" ? "Đã dừng." : "Stopped.", false);
-    var readBtn = document.getElementById("readNews");
-    var stopBtn = document.getElementById("stopRead");
-    if (readBtn) readBtn.disabled = false;
-    if (stopBtn) stopBtn.disabled = true;
   }}
 
   var r = document.getElementById("readNews");
@@ -495,7 +543,7 @@ def digest_reader_script(
   var saveBtn = document.getElementById("saveReaderApiKey");
   var keyInp = document.getElementById("readerAzureKeyInput");
   var regInp = document.getElementById("readerAzureRegionInput");
-  if (r) r.addEventListener("click", function() {{ runRead().catch(function(e) {{ status(String(e), true); }}); }});
+  if (r) r.addEventListener("click", function() {{ runRead(resumeIndex).catch(function(e) {{ status(String(e), true); }}); }});
   if (s) s.addEventListener("click", stopRead);
   if (saveBtn) saveBtn.addEventListener("click", persistReaderKeys);
   function onEnter(el) {{
