@@ -833,21 +833,30 @@ def generate_overall_briefing(
     """One LLM call: synthesize a short Vietnamese briefing over all item summaries."""
     if not items:
         return None
-    parts = [f"{i + 1}. [{it.category}] {it.topic}: {(it.summary or '').strip()}" for i, it in enumerate(items)]
-    out_tokens = 1200
+    # Drop exact-duplicate titles (the same story is often syndicated across feeds).
+    seen: set[str] = set()
+    parts: list[str] = []
+    for it in items:
+        key = re.sub(r"\s+", " ", (it.topic or "").strip().lower())
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        parts.append(f"{len(parts) + 1}. [{it.category}] {it.topic}: {(it.summary or '').strip()}")
+    out_tokens = 6000  # enough for a full multi-paragraph briefing plus the model's thinking overhead
     cap_chars = max(2000, int((summary_tpm * 0.8 - out_tokens - 400) * 2))  # keep the request under TPM
     prompt = (
-        "Bạn là biên tập viên thời sự. Dưới đây là danh sách tin trong ngày (số thứ tự, [chủ đề], tiêu đề: tóm tắt). "
-        "Hãy viết BẢN TỔNG HỢP ngắn gọn bằng tiếng Việt gồm 3–5 đoạn, nêu các diễn biến chính, nhóm theo chủ đề "
-        "khi hợp lý, văn phong trung lập. Chỉ trả về văn bản thuần (các đoạn cách nhau bằng dòng trống), không markdown, "
-        "không tiêu đề.\n\nDANH SÁCH TIN:\n" + "\n".join(parts)[:cap_chars]
+        "Bạn là biên tập viên thời sự. Dưới đây là danh sách TẤT CẢ tin trong ngày (số thứ tự, [chủ đề], "
+        "tiêu đề: tóm tắt). Hãy viết BẢN TỔNG HỢP bằng tiếng Việt, BAO QUÁT tất cả diễn biến chính, nhóm theo "
+        "chủ đề, mỗi chủ đề một đoạn ngắn; không bỏ sót tin quan trọng và không lặp lại tin trùng. Văn phong "
+        "trung lập. Chỉ trả về văn bản thuần (các đoạn cách nhau bằng dòng trống), không markdown, không tiêu đề.\n\n"
+        "DANH SÁCH TIN:\n" + "\n".join(parts)[:cap_chars]
     )
     for m in _gemini_model_candidates(model, model_fallback):
         for attempt in range(3):
             try:
                 txt = svc.chat_text(
                     token=api_key, model=m, prompt=prompt, max_tokens=out_tokens,
-                    temperature=0.4, timeout_s=request_timeout_s, reasoning_effort="low",
+                    temperature=0.4, timeout_s=request_timeout_s, reasoning_effort="minimal",
                 )
                 if txt and txt.strip():
                     return txt.strip()
@@ -942,7 +951,7 @@ def build_html(
     )
 
     if summary_overview and summary_overview.strip():
-        paras = [p.strip() for p in re.split(r"\n\s*\n", summary_overview.strip()) if p.strip()]
+        paras = [p.strip() for p in re.split(r"\n+", summary_overview.strip()) if p.strip()]
         paras_html = "".join(f"<p>{html_module.escape(p)}</p>" for p in (paras or [summary_overview.strip()]))
         summary_pane_html = (
             '<div class="summary-wrap">'

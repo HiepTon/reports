@@ -220,7 +220,8 @@ def chat_text(
     messages.append({"role": "user", "content": prompt})
     body: dict = {"model": model, "messages": messages, "temperature": temperature, "max_tokens": max_tokens}
     if reasoning_effort:
-        body["reasoning_effort"] = reasoning_effort
+        # gpt-oss accepts low/medium/high; map Gemini's "minimal" onto "low".
+        body["reasoning_effort"] = "low" if reasoning_effort == "minimal" else reasoning_effort
     if json_object:
         body["response_format"] = {"type": "json_object"}
     payload = json.dumps(body).encode("utf-8")
