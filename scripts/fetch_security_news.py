@@ -45,6 +45,7 @@ from digest_reader_embed import (
     digest_reader_script,
     digest_reader_sdk_script_tag,
     digest_reader_toolbar_inner,
+    digest_summary_controls_inner,
 )
 from digest_rebuild_embed import (
     digest_rebuild_css,
@@ -673,6 +674,48 @@ def fetch_feed_bytes(url: str, timeout: int) -> bytes:
         raise RuntimeError(f"Network error for {url}: {exc.reason}") from exc
 
 
+def generate_overall_briefing(
+    items: list[NewsItem],
+    *,
+    svc,
+    api_key: str,
+    model: str,
+    model_fallback: str | None,
+    request_timeout_s: int,
+    summary_tpm: int,
+) -> str | None:
+    """One LLM call: synthesize a short English security briefing over all item summaries."""
+    if not items:
+        return None
+    parts = [f"{i + 1}. {it.topic}: {(it.summary or '').strip()}" for i, it in enumerate(items)]
+    out_tokens = 1200
+    cap_chars = max(2000, int((summary_tpm * 0.8 - out_tokens - 400) * 2))  # keep the request under TPM
+    prompt = (
+        "You are a security news editor. Below is today's list of stories (number, title: summary). "
+        "Write a concise English BRIEFING of 3-5 short paragraphs covering the main developments, grouped "
+        "by theme where sensible, in a neutral tone. Return plain text only (paragraphs separated by a blank "
+        "line), no markdown, no heading.\n\nSTORIES:\n" + "\n".join(parts)[:cap_chars]
+    )
+    for m in _gemini_model_candidates(model, model_fallback):
+        for attempt in range(3):
+            try:
+                txt = svc.chat_text(
+                    token=api_key, model=m, prompt=prompt, max_tokens=out_tokens,
+                    temperature=0.4, timeout_s=request_timeout_s, reasoning_effort="low",
+                )
+                if txt and txt.strip():
+                    return txt.strip()
+                break
+            except Exception as exc:  # noqa: BLE001
+                if svc.is_daily_quota(exc) or svc.is_model_unavailable(exc):
+                    break
+                if svc.is_transient(exc) and attempt < 2:
+                    time.sleep(svc.retry_sleep_seconds(exc, attempt))
+                    continue
+                break
+    return None
+
+
 def _parse_kev_json(source_id: str, source_name: str, url: str, timeout: int, max_recent: int = 60) -> list[NewsItem]:
     """Parse CISA's Known Exploited Vulnerabilities catalog JSON into NewsItems.
 
@@ -856,6 +899,7 @@ def build_html(
     server_days: int | None = None,
     summary_model: str | None = None,
     summary_provider: str = "Groq",
+    summary_overview: str | None = None,
     summary_article_pages: bool = False,
     read_news_azure_voice: str = READ_NEWS_AZURE_VOICE_EN_DEFAULT,
     read_news_azure_voice_fallback: str = READ_NEWS_AZURE_VOICE_FALLBACK_EN_DEFAULT,
@@ -888,6 +932,19 @@ def build_html(
         + html_module.escape(read_news_azure_voice_fallback)
         + "); Azure key + region in-toolbar, saved in localStorage (persists across visits)."
     )
+
+    if summary_overview and summary_overview.strip():
+        paras = [p.strip() for p in re.split(r"\n\s*\n", summary_overview.strip()) if p.strip()]
+        paras_html = "".join(f"<p>{html_module.escape(p)}</p>" for p in (paras or [summary_overview.strip()]))
+        summary_pane_html = (
+            '<div class="summary-wrap">'
+            + digest_summary_controls_inner(lang="en")
+            + f'<div id="summaryText">{paras_html}</div>'
+            + "</div>"
+        )
+    else:
+        summary_pane_html = '<p class="summary-empty">No summary available (run with --summarize to generate one).</p>'
+
     cards: list[str] = []
     for it in items:
         pub = html_module.escape(it.published or "date unknown")
@@ -1011,6 +1068,11 @@ def build_html(
     <h1>Security news digest</h1>
     <p class="meta">Generated {html_module.escape(when)} · <span id="visibleCount">{len(items)}</span> shown · <a class="full" href="archive/">🕘 History</a><br/>
     <span class="submeta">{summary_note_esc}</span></p>
+    <div class="tabs" role="tablist">
+      <button type="button" class="tab-btn active" data-tab="pane-news">News</button>
+      <button type="button" class="tab-btn" data-tab="pane-summary">Summary</button>
+    </div>
+    <div id="pane-news" class="tab-pane">
     <div class="toolbar">
       <label>Show articles from last
         <input type="number" id="dayWindow" min="1" max="3650" value="{day_default}"/>
@@ -1023,6 +1085,10 @@ def build_html(
 {digest_rebuild_toolbar_inner(lang="en", selected="security-news-daily.yml")}
     </div>
 {body}
+    </div>
+    <div id="pane-summary" class="tab-pane" hidden>
+{summary_pane_html}
+    </div>
   </div>
   <script>
 (function() {{
@@ -1294,6 +1360,7 @@ def main() -> int:
     items = items[: args.limit]
 
     summary_model_used: str | None = None
+    overview: str | None = None
     if args.summarize:
         svc = _SUMMARY_PROVIDERS[args.summary_provider]
         provider_name = args.summary_provider
@@ -1306,6 +1373,7 @@ def main() -> int:
         model_fallback = args.summary_model_fallback if args.summary_model_fallback is not None else svc.SUMMARY_MODEL_FALLBACK_DEFAULT
         chunk_size = args.gemini_chunk_size if args.gemini_chunk_size is not None else svc.DEFAULT_CHUNK_SIZE
         max_output_tokens = args.gemini_max_output_tokens if args.gemini_max_output_tokens is not None else svc.DEFAULT_MAX_OUTPUT_TOKENS
+        summary_tpm = args.summary_tpm if args.summary_tpm is not None else svc.DEFAULT_TPM_LIMIT
         try:
             if not args.gemini_no_fetch_article:
                 print(
@@ -1329,7 +1397,7 @@ def main() -> int:
                 chunk_size=chunk_size,
                 chunk_pause_s=args.gemini_chunk_pause,
                 max_retries=args.gemini_retries,
-                summary_tpm=args.summary_tpm,
+                summary_tpm=summary_tpm,
                 svc=svc,
             )
             summary_model_used = model
@@ -1339,6 +1407,14 @@ def main() -> int:
                 f"{provider_name} batch enrichment OK ({summary_model_used}, {len(items)} articles).",
                 file=sys.stderr,
             )
+            try:
+                overview = generate_overall_briefing(
+                    items, svc=svc, api_key=key, model=model, model_fallback=model_fallback,
+                    request_timeout_s=args.gemini_timeout, summary_tpm=summary_tpm,
+                )
+                print(f"Overall briefing: {'OK' if overview else 'not generated'}.", file=sys.stderr)
+            except Exception as exc:  # noqa: BLE001
+                print(f"Overall briefing failed: {exc}", file=sys.stderr)
         except Exception as exc:  # noqa: BLE001
             print(f"{provider_name} batch failed; keeping RSS/heuristic text: {exc}", file=sys.stderr)
 
@@ -1351,6 +1427,7 @@ def main() -> int:
                 server_days=server_days,
                 summary_model=summary_model_used,
                 summary_provider=_SUMMARY_PROVIDERS[args.summary_provider].DISPLAY_NAME,
+                summary_overview=overview,
                 summary_article_pages=bool(summary_model_used) and not args.gemini_no_fetch_article,
                 read_news_azure_voice=args.read_news_azure_voice,
                 read_news_azure_voice_fallback=args.read_news_azure_voice_fallback,

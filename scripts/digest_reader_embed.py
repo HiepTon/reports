@@ -87,6 +87,22 @@ def digest_reader_css() -> str:
       border: 1px solid var(--border); background: transparent; color: var(--muted); white-space: nowrap;
     }
     .reader-card-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .tabs { display: flex; gap: 0.4rem; margin: 0.9rem 0 0.2rem; border-bottom: 1px solid var(--border); }
+    .tab-btn {
+      cursor: pointer; padding: 0.45rem 0.9rem; font-size: 0.92rem; font-weight: 650;
+      background: transparent; color: var(--muted); border: 1px solid transparent; border-bottom: none;
+      border-radius: 8px 8px 0 0; margin-bottom: -1px;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-color: var(--border); border-bottom: 1px solid var(--bg); background: var(--card, rgba(255,255,255,0.02)); }
+    .tab-pane[hidden] { display: none; }
+    .summary-wrap { margin-top: 0.9rem; }
+    #summaryText { font-size: 1rem; line-height: 1.65; color: #d5dde8; }
+    #summaryText p { margin: 0 0 0.9rem; }
+    .summary-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; margin: 0.4rem 0 1rem; }
+    #summaryStatus { flex: 1 1 12rem; font-size: 0.8rem; color: var(--muted); margin: 0; min-height: 1.2em; }
+    #summaryStatus.err { color: #f0a4a4; }
+    .summary-empty { color: var(--muted); }
 """
 
 
@@ -134,6 +150,21 @@ def digest_reader_toolbar_inner(*, lang: str) -> str:
         <p id="readStatus"></p>
       </div>
     </div>"""
+
+
+def digest_summary_controls_inner(*, lang: str) -> str:
+    """Read/stop controls for the summary ("Tổng hợp") tab. Shares the reader's TTS engine."""
+    if lang == "vi":
+        return """<div class="reader-tools summary-actions">
+        <button type="button" class="apply read" id="readSummary">▶ Đọc bản tổng hợp</button>
+        <button type="button" class="reset stop" id="stopSummary" disabled>Dừng đọc</button>
+        <p id="summaryStatus"></p>
+      </div>"""
+    return """<div class="reader-tools summary-actions">
+        <button type="button" class="apply read" id="readSummary">▶ Read the summary</button>
+        <button type="button" class="reset stop" id="stopSummary" disabled>Stop</button>
+        <p id="summaryStatus"></p>
+      </div>"""
 
 
 def digest_reader_script(
@@ -592,6 +623,88 @@ def digest_reader_script(
     }}
   }}
 
+  // ---- Summary ("Tổng hợp") tab: read the synthesized briefing via the same TTS engine ----
+  function summaryStatus(msg, isErr) {{
+    var el = document.getElementById("summaryStatus");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.className = isErr ? "err" : "";
+  }}
+  function setSummaryReadingUI(reading) {{
+    var rb = document.getElementById("readSummary");
+    var sb = document.getElementById("stopSummary");
+    if (rb) rb.disabled = reading;
+    if (sb) sb.disabled = !reading;
+  }}
+  function collectSummaryChunks() {{
+    var el = document.getElementById("summaryText");
+    if (!el) return [];
+    var chunks = [];
+    var ps = el.querySelectorAll("p");
+    for (var i = 0; i < ps.length; i++) {{ var t = ps[i].textContent.trim(); if (t) chunks.push(t); }}
+    if (!chunks.length) {{ var all = el.textContent.trim(); if (all) chunks.push(all); }}
+    return chunks;
+  }}
+  async function runSummary() {{
+    // Reuse the shared engine (synth/playMp3Buffer/stopPlayback/speed); paragraph = chunk.
+    if (currentRun) {{ stopRead(); try {{ await currentRun; }} catch (e) {{}} }}
+    currentRun = (async function() {{
+      readAborted = false;
+      var chunks = collectSummaryChunks();
+      if (!chunks.length) {{
+        summaryStatus(LANG === "vi" ? "Chưa có bản tổng hợp." : "No summary available.", true);
+        return;
+      }}
+      var key = getAzureKey(), region = getAzureRegion();
+      if (!key || !region) {{
+        summaryStatus(LANG === "vi" ? "Nhập và lưu khóa Azure Speech + vùng để đọc." : "Enter and save an Azure Speech key + region to read.", true);
+        return;
+      }}
+      setSummaryReadingUI(true);
+      if (currentAudio) {{ try {{ currentAudio.pause(); }} catch (e) {{}} currentAudio = null; }}
+      var prefetch = null;
+      try {{
+        prefetch = synth(key, region, chunks[0]);
+        for (var j = 0; j < chunks.length; j++) {{
+          if (readAborted) break;
+          summaryStatus((LANG === "vi" ? "Đang đọc bản tổng hợp… " : "Reading the summary… ") + (j + 1) + "/" + chunks.length);
+          var buf = await prefetch;
+          if (readAborted) break;
+          prefetch = (j + 1 < chunks.length) ? synth(key, region, chunks[j + 1]) : null;
+          await playMp3Buffer(buf);
+        }}
+      }} catch (e) {{
+        swallow(prefetch); disposeAllSynths();
+        if (!readAborted) summaryStatus(String(e && e.message ? e.message : e), true);
+        else summaryStatus(LANG === "vi" ? "Đã dừng." : "Stopped.", false);
+        setSummaryReadingUI(false);
+        return;
+      }}
+      swallow(prefetch); disposeAllSynths();
+      summaryStatus(readAborted ? (LANG === "vi" ? "Đã dừng." : "Stopped.") : (LANG === "vi" ? "Đã đọc xong." : "Finished."), false);
+      setSummaryReadingUI(false);
+    }})();
+    currentRun.then(function() {{ currentRun = null; }}, function() {{ currentRun = null; }});
+    return currentRun;
+  }}
+
+  function initTabs() {{
+    var btns = document.querySelectorAll(".tab-btn");
+    for (var i = 0; i < btns.length; i++) {{
+      btns[i].addEventListener("click", function() {{
+        var target = this.getAttribute("data-tab");
+        var allBtns = document.querySelectorAll(".tab-btn");
+        for (var k = 0; k < allBtns.length; k++) {{
+          var t = allBtns[k].getAttribute("data-tab");
+          var pane = document.getElementById(t);
+          var on = t === target;
+          allBtns[k].className = on ? "tab-btn active" : "tab-btn";
+          if (pane) pane.hidden = !on;
+        }}
+      }});
+    }}
+  }}
+
   var r = document.getElementById("readNews");
   var s = document.getElementById("stopRead");
   var saveBtn = document.getElementById("saveReaderApiKey");
@@ -599,6 +712,10 @@ def digest_reader_script(
   var regInp = document.getElementById("readerAzureRegionInput");
   if (r) r.addEventListener("click", function() {{ startFromIndex(resumeIndex).catch(function(e) {{ status(String(e), true); }}); }});
   if (s) s.addEventListener("click", stopRead);
+  var sumR = document.getElementById("readSummary");
+  var sumS = document.getElementById("stopSummary");
+  if (sumR) sumR.addEventListener("click", function() {{ runSummary().catch(function(e) {{ summaryStatus(String(e), true); }}); }});
+  if (sumS) sumS.addEventListener("click", stopRead);
   if (saveBtn) saveBtn.addEventListener("click", persistReaderKeys);
   function onEnter(el) {{
     if (!el) return;
@@ -613,5 +730,6 @@ def digest_reader_script(
   refreshSpeechRateUI();
   syncKeyHintOnLoad();
   injectCardReadButtons();
+  initTabs();
 }})();
 """

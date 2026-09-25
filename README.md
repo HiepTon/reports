@@ -73,6 +73,8 @@ Default model is **`openai/gpt-oss-20b`** with a fallback **chain** **`openai/gp
 
 **Provider choice — Groq or Gemini.** Use **`--summary-provider gemini`** to summarize with **Google Gemini** ([AI Studio](https://aistudio.google.com)) instead of Groq; export **`GEMINI_API_KEY`**. Gemini's free tier is request-bound (not token-bound), so it defaults to **`gemini-3.1-flash-lite`** (15 RPM / 500 RPD, minimal-thinking) with fallback **`gemini-2.5-flash-lite`**, and paces by requests-per-minute. `--summary-provider groq` (default) uses Groq. `--summary-model` / `--summary-tpm` default to the selected provider's own defaults.
 
+**Two tabs on the page.** When summarizing, the page has a **News** tab (the article list, with the reader) and a **Summary** tab containing an **AI-synthesized briefing** of all items (one extra LLM call over the per-item summaries) plus a **read** button that speaks that briefing via the same Azure TTS engine.
+
 Tuning flags (historical `--gemini-*` names, provider-agnostic): **`--gemini-max-excerpt-chars`** (default 480), **`--gemini-max-output-tokens`**, **`--gemini-timeout`**, **`--gemini-chunk-size`** (use **0** for a single request containing every article—higher rate-limit risk on the free tier).
 
 If Groq errors or returns unusable JSON, the script **falls back** to RSS + heuristics and still writes HTML/JSON. Cards that were not AI-summarized (no key, or a per-item Groq failure) are flagged with a **“Not summarized”** badge and their heading reads **“Description (RSS)”** instead of “Summary”, so it’s clear which items show the raw RSS text. The item’s `summarized` boolean is also written to the JSON output.

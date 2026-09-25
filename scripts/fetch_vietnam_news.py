@@ -44,6 +44,7 @@ from digest_reader_embed import (
     digest_reader_script,
     digest_reader_sdk_script_tag,
     digest_reader_toolbar_inner,
+    digest_summary_controls_inner,
 )
 from digest_rebuild_embed import (
     digest_rebuild_css,
@@ -819,6 +820,48 @@ def groq_vietnam_enrich(
     return out, used_fallback
 
 
+def generate_overall_briefing(
+    items: list[VietnamNewsItem],
+    *,
+    svc,
+    api_key: str,
+    model: str,
+    model_fallback: str | None,
+    request_timeout_s: int,
+    summary_tpm: int,
+) -> str | None:
+    """One LLM call: synthesize a short Vietnamese briefing over all item summaries."""
+    if not items:
+        return None
+    parts = [f"{i + 1}. [{it.category}] {it.topic}: {(it.summary or '').strip()}" for i, it in enumerate(items)]
+    out_tokens = 1200
+    cap_chars = max(2000, int((summary_tpm * 0.8 - out_tokens - 400) * 2))  # keep the request under TPM
+    prompt = (
+        "Bạn là biên tập viên thời sự. Dưới đây là danh sách tin trong ngày (số thứ tự, [chủ đề], tiêu đề: tóm tắt). "
+        "Hãy viết BẢN TỔNG HỢP ngắn gọn bằng tiếng Việt gồm 3–5 đoạn, nêu các diễn biến chính, nhóm theo chủ đề "
+        "khi hợp lý, văn phong trung lập. Chỉ trả về văn bản thuần (các đoạn cách nhau bằng dòng trống), không markdown, "
+        "không tiêu đề.\n\nDANH SÁCH TIN:\n" + "\n".join(parts)[:cap_chars]
+    )
+    for m in _gemini_model_candidates(model, model_fallback):
+        for attempt in range(3):
+            try:
+                txt = svc.chat_text(
+                    token=api_key, model=m, prompt=prompt, max_tokens=out_tokens,
+                    temperature=0.4, timeout_s=request_timeout_s, reasoning_effort="low",
+                )
+                if txt and txt.strip():
+                    return txt.strip()
+                break
+            except Exception as exc:  # noqa: BLE001
+                if svc.is_daily_quota(exc) or svc.is_model_unavailable(exc):
+                    break
+                if svc.is_transient(exc) and attempt < 2:
+                    time.sleep(svc.retry_sleep_seconds(exc, attempt))
+                    continue
+                break
+    return None
+
+
 def _category_slug(cat: str) -> str:
     s = re.sub(r"[^\w\-]+", "-", cat.lower(), flags=re.UNICODE)
     return re.sub(r"-+", "-", s).strip("-") or "khac"
@@ -863,6 +906,7 @@ def build_html(
     server_days: int | None = None,
     summary_model: str | None = None,
     summary_provider: str = "Groq",
+    summary_overview: str | None = None,
     summary_article_pages: bool = False,
     read_news_azure_voice: str = READ_NEWS_AZURE_VOICE_VI_DEFAULT,
     read_news_azure_voice_fallback: str = READ_NEWS_AZURE_VOICE_FALLBACK_VI_DEFAULT,
@@ -896,6 +940,18 @@ def build_html(
         + html_module.escape(read_news_azure_voice_fallback)
         + "); nhập khóa Azure + vùng ở ô phía trên."
     )
+
+    if summary_overview and summary_overview.strip():
+        paras = [p.strip() for p in re.split(r"\n\s*\n", summary_overview.strip()) if p.strip()]
+        paras_html = "".join(f"<p>{html_module.escape(p)}</p>" for p in (paras or [summary_overview.strip()]))
+        summary_pane_html = (
+            '<div class="summary-wrap">'
+            + digest_summary_controls_inner(lang="vi")
+            + f'<div id="summaryText">{paras_html}</div>'
+            + "</div>"
+        )
+    else:
+        summary_pane_html = '<p class="summary-empty">Chưa có bản tổng hợp (chạy với --summarize để tạo bằng AI).</p>'
 
     idx = 0
     while idx < len(items) and _is_tuoitre_top_item(items[idx]):
@@ -983,6 +1039,11 @@ def build_html(
     <h1>Tin Việt Nam — tổng hợp RSS</h1>
     <p class="meta">Cập nhật {html_module.escape(when)} · <span id="visibleCount">{len(items)}</span> bài · <a class="full" href="../archive/">🕘 Lịch sử</a><br/>
     <span class="submeta">{html_module.escape(ai_note)}</span></p>
+    <div class="tabs" role="tablist">
+      <button type="button" class="tab-btn active" data-tab="pane-news">Tin tức</button>
+      <button type="button" class="tab-btn" data-tab="pane-summary">Tổng hợp</button>
+    </div>
+    <div id="pane-news" class="tab-pane">
     <div class="toolbar">
       <label>Hiện bài trong
         <input type="number" id="dayWindow" min="1" max="3650" value="{day_default}"/>
@@ -995,6 +1056,10 @@ def build_html(
 {digest_rebuild_toolbar_inner(lang="vi", selected="vietnam-news-daily.yml")}
     </div>
 {body}
+    </div>
+    <div id="pane-summary" class="tab-pane" hidden>
+{summary_pane_html}
+    </div>
   </div>
   <script>
 (function() {{
@@ -1163,6 +1228,7 @@ def main() -> int:
     items = items[: args.limit]
 
     summary_model_used: str | None = None
+    overview: str | None = None
     if args.summarize:
         svc = _SUMMARY_PROVIDERS[args.summary_provider]
         provider_name = args.summary_provider
@@ -1175,6 +1241,7 @@ def main() -> int:
         model_fallback = args.summary_model_fallback if args.summary_model_fallback is not None else svc.SUMMARY_MODEL_FALLBACK_DEFAULT
         chunk_size = args.gemini_chunk_size if args.gemini_chunk_size is not None else svc.DEFAULT_CHUNK_SIZE
         max_output_tokens = args.gemini_max_output_tokens if args.gemini_max_output_tokens is not None else svc.DEFAULT_MAX_OUTPUT_TOKENS
+        summary_tpm = args.summary_tpm if args.summary_tpm is not None else svc.DEFAULT_TPM_LIMIT
         try:
             if not args.gemini_no_fetch_article:
                 print(
@@ -1198,13 +1265,21 @@ def main() -> int:
                 chunk_size=chunk_size,
                 chunk_pause_s=args.gemini_chunk_pause,
                 max_retries=args.gemini_retries,
-                summary_tpm=args.summary_tpm,
+                summary_tpm=summary_tpm,
                 svc=svc,
             )
             summary_model_used = model
             if vn_fallback_used:
                 summary_model_used = f"{model} (fallback used: {model_fallback})"
             print(f"{provider_name} OK ({summary_model_used}, {len(items)} bài).", file=sys.stderr)
+            try:
+                overview = generate_overall_briefing(
+                    items, svc=svc, api_key=key, model=model, model_fallback=model_fallback,
+                    request_timeout_s=args.gemini_timeout, summary_tpm=summary_tpm,
+                )
+                print(f"Bản tổng hợp: {'OK' if overview else 'không tạo được'}.", file=sys.stderr)
+            except Exception as exc:  # noqa: BLE001
+                print(f"Bản tổng hợp lỗi: {exc}", file=sys.stderr)
         except Exception as exc:  # noqa: BLE001
             print(f"{provider_name} lỗi, giữ tóm tắt RSS: {exc}", file=sys.stderr)
 
@@ -1217,6 +1292,7 @@ def main() -> int:
                 server_days=server_days,
                 summary_model=summary_model_used,
                 summary_provider=_SUMMARY_PROVIDERS[args.summary_provider].DISPLAY_NAME,
+                summary_overview=overview,
                 summary_article_pages=bool(summary_model_used) and not args.gemini_no_fetch_article,
                 read_news_azure_voice=args.read_news_azure_voice,
                 read_news_azure_voice_fallback=args.read_news_azure_voice_fallback,
