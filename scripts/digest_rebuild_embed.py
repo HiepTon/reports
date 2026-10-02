@@ -18,6 +18,7 @@ REBUILD_REF_DEFAULT = "main"
 REBUILD_WORKFLOWS = [
     ("vietnam-news-daily.yml", "Vietnam digest", "Tin Việt Nam"),
     ("security-news-daily.yml", "Security digest", "Tin an ninh mạng"),
+    ("weekly-news-digest.yml", "Weekly digest", "Tin hàng tuần"),
 ]
 
 

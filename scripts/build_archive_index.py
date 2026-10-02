@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Generate a browsable index of archived digest snapshots.
 
-Scans <archive-dir>/security/*.html and <archive-dir>/vietnam/*.html (dated
-YYYY-MM-DD.html) and writes a self-contained index.html linking to each snapshot,
-newest first. Run by the Pages workflows after copying today's page into the
-archive. Links are relative to the index location (e.g. "security/2026-09-23.html").
+Scans <archive-dir>/security/*.html, <archive-dir>/vietnam/*.html and
+<archive-dir>/weekly/*.html (dated YYYY-MM-DD.html) and writes a self-contained
+index.html linking to each snapshot, newest first. Run by the Pages workflows after
+copying today's page into the archive. Links are relative to the index location
+(e.g. "security/2026-09-23.html").
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ _DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.html$")
 _SECTIONS = [
     ("security", "Security digest"),
     ("vietnam", "Vietnam digest"),
+    ("weekly", "Weekly digest"),
 ]
 
 
@@ -94,7 +96,7 @@ def build_index_html(archive_dir: Path) -> str:
   <div class="wrap">
     <h1>Digest archive</h1>
     <p class="meta">Updated {html.escape(when)}</p>
-    <p class="nav"><a href="../index.html">← Security (latest)</a><a href="../vietnam/index.html">Vietnam (latest) →</a></p>
+    <p class="nav"><a href="../index.html">← Security (latest)</a><a href="../vietnam/index.html">Vietnam (latest)</a><a href="../weekly/index.html">Weekly (latest) →</a></p>
 {sections}
   </div>
 </body>

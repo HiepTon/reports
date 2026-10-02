@@ -165,9 +165,41 @@ Workflow: [`.github/workflows/vietnam-news-daily.yml`](.github/workflows/vietnam
 - **GitHub Pages:** builds **only** the Vietnam HTML (`vietnam/index.html`) into the `gh-pages` working copy (which already holds the security page), saves a dated snapshot under `archive/vietnam/`, then **deploys** the whole site to Pages. After the first run, open **Settings → Pages** (or the **`github-pages`** environment URL on the run) and use **`/vietnam/`** for the Vietnamese digest.
 - **Artifact:** each run still uploads **`vietnam-news`** (zip with the Vietnam `index.html`) for offline download.
 
+## Weekly news digest
+
+[`scripts/fetch_weekly_news.py`](scripts/fetch_weekly_news.py) is a **configurable, lower-frequency clone** of the Vietnam digest: same summaries, categories, reader and layout, but with its **own feed list** ([`config/weekly_news_feeds.json`](config/weekly_news_feeds.json)) and its **own schedule**. Point it at any feeds you follow less often (weeklies, long-form, niche sources) and it runs once a week. Output: **HTML** and/or **JSON**; UI strings are Vietnamese.
+
+**Ordering:** same as the Vietnam digest — **feed sequence in the config**, then **newest-first within each feed**. The **first feed listed** leads the digest and its items form the highlighted **Tin nổi bật** section (the heading shows that feed's title). Reorder feeds in the config to change the display order; on a duplicate URL, the earlier feed keeps the article.
+
+### Setup
+
+```bash
+pip install -r requirements-weekly-news.txt
+```
+
+### Local run
+
+```bash
+python scripts/fetch_weekly_news.py --limit 15
+GROQ_API_KEY=... python scripts/fetch_weekly_news.py --summarize --days 7 --html output/weekly/index.html
+```
+
+All summary flags match `fetch_vietnam_news.py` (`--summarize`, `--summary-provider`, `--summary-model`, `--gemini-chunk-size`, etc.). Without **`--summarize`** it keeps RSS blurbs and category **`Chưa phân loại`**.
+
+### GitHub Actions (weekly, Mondays)
+
+Workflow: [`.github/workflows/weekly-news-digest.yml`](.github/workflows/weekly-news-digest.yml).
+
+- **Cron:** `0 21 * * 1` **UTC** → ~**04:00 Tuesday** in **Vietnam** (ICT, **UTC+7**). Runs weekly; `--days 7` covers the whole week. Trigger any time with **Run workflow** (workflow_dispatch), or the in-page **Rebuild** control → **Weekly digest**.
+- **GitHub Pages:** builds **only** the Weekly HTML (`weekly/index.html`) into the `gh-pages` working copy (which already holds the security and Vietnam pages), saves a dated snapshot under `archive/weekly/`, then **deploys** the whole site to Pages. Open **`/weekly/`** for the digest.
+- **Artifact:** each run uploads **`weekly-news`** (zip with the Weekly `index.html`) for offline download.
+
+To change which feeds it reads, edit [`config/weekly_news_feeds.json`](config/weekly_news_feeds.json) (same format as the other digests — see [Adding feeds](#adding-or-changing-feeds)). To change the cadence, edit the `cron` in the workflow.
+
 ### Other scripts
 
 - `scripts/fetch_vietnam_news.py` — Vietnam RSS digest with optional Groq summaries and categories ([Vietnam news digest](#vietnam-news-digest)).
+- `scripts/fetch_weekly_news.py` — configurable lower-frequency clone of the Vietnam digest ([Weekly news digest](#weekly-news-digest)).
 - `scripts/build_insight_report_docx.py` — builds insight report documents (see script docstring and usage there).
 
 ### Notes
@@ -194,9 +226,9 @@ Create the empty repository first in the GitHub UI (**New repository**), then ru
 
 ## GitHub Pages (public URL)
 
-The workflows [`.github/workflows/security-news-daily.yml`](.github/workflows/security-news-daily.yml) and [`.github/workflows/vietnam-news-daily.yml`](.github/workflows/vietnam-news-daily.yml) each build **only their own** digest — security → `index.html`, Vietnam → `vietnam/index.html` — to keep each run's Groq token usage separate.
+The workflows [`.github/workflows/security-news-daily.yml`](.github/workflows/security-news-daily.yml), [`.github/workflows/vietnam-news-daily.yml`](.github/workflows/vietnam-news-daily.yml) and [`.github/workflows/weekly-news-digest.yml`](.github/workflows/weekly-news-digest.yml) each build **only their own** digest — security → `index.html`, Vietnam → `vietnam/index.html`, Weekly → `weekly/index.html` — to keep each run's Groq token usage separate.
 
-**Site storage + history (`gh-pages` branch):** the published site lives on the **`gh-pages`** branch, which each run clones into `./site`, updates with its own page, and pushes back — so the branch is a persistent store that also gives full **history** (every deploy is a commit). Each run additionally saves a dated snapshot under **`archive/<digest>/YYYY-MM-DD.html`** and rebuilds **`archive/index.html`**, so past digests stay browsable at `…/archive/` (linked as **🕘 History** from each page). The whole `./site` tree is then deployed to Pages via the Actions artifact (Pages **Source: GitHub Actions** — no branch-source setting needed). `main` stays **source-only** (generated HTML is git-ignored). The two workflows share the `pages` concurrency group so runs never overlap.
+**Site storage + history (`gh-pages` branch):** the published site lives on the **`gh-pages`** branch, which each run clones into `./site`, updates with its own page, and pushes back — so the branch is a persistent store that also gives full **history** (every deploy is a commit). Each run additionally saves a dated snapshot under **`archive/<digest>/YYYY-MM-DD.html`** and rebuilds **`archive/index.html`**, so past digests stay browsable at `…/archive/` (linked as **🕘 History** from each page). The whole `./site` tree is then deployed to Pages via the Actions artifact (Pages **Source: GitHub Actions** — no branch-source setting needed). `main` stays **source-only** (generated HTML is git-ignored). All three workflows share the `pages` concurrency group so runs never overlap.
 
 ### One-time repository settings
 
@@ -213,7 +245,7 @@ The first **deploy** job may ask you to **review and enable** the `github-pages`
 | User/org site repo named `username.github.io` | `https://username.github.io/` |
 | Normal project repo `username/reports` | `https://username.github.io/reports/` |
 
-The security digest is at the site root (**`index.html`**). The Vietnam digest is at **`vietnam/index.html`** (for a project repo `https://user.github.io/reports/`, open **`https://user.github.io/reports/vietnam/`** or **`.../vietnam/index.html`**).
+The security digest is at the site root (**`index.html`**). The Vietnam digest is at **`vietnam/index.html`** and the Weekly digest at **`weekly/index.html`** (for a project repo `https://user.github.io/reports/`, open **`https://user.github.io/reports/vietnam/`** or **`.../weekly/`**).
 
 After a successful run, open **Actions** → latest workflow → **deploy** job → **github-pages** environment link, or check **Settings → Pages** for the live URL.
 

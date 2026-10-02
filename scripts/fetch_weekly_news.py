@@ -1,0 +1,1327 @@
+#!/usr/bin/env python3
+"""
+Tổng hợp tin RSS từ các nguồn tùy chọn (chạy theo lịch thưa — ví dụ hàng tuần), tóm tắt và gắn nhóm
+chủ đề bằng LLM (Groq hoặc Gemini, tùy chọn).
+
+Weekly news digest: a configurable clone of the Vietnam digest. Point it at any feeds via
+config/weekly_news_feeds.json and run it on its own (lower-frequency) schedule. Items are ordered by
+feed sequence in the config, then newest-first within each feed; the first feed listed leads the digest
+and its items form the highlighted "Tin nổi bật" section. After date filtering, **`--limit`** keeps the
+top N in that order.
+Optional --summarize for Vietnamese summaries + categories (by default loads each article page and extracts text for the model; use --gemini-no-fetch-article for RSS-only).
+
+Usage:
+  pip install -r requirements-weekly-news.txt
+  python scripts/fetch_weekly_news.py --limit 15
+  GROQ_API_KEY=... python scripts/fetch_weekly_news.py --summarize --html output/weekly/index.html
+"""
+
+from __future__ import annotations
+
+import argparse
+import email.utils
+import gzip
+import html as html_module
+import json
+import os
+import re
+import sys
+import time
+from dataclasses import asdict, dataclass, replace
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+import urllib.error
+import urllib.request
+from urllib.parse import parse_qsl, quote, urlencode, urlparse, urlunparse
+
+import feedparser
+
+_SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+from digest_reader_embed import (
+    READ_NEWS_AZURE_VOICE_FALLBACK_VI_DEFAULT,
+    READ_NEWS_AZURE_VOICE_VI_DEFAULT,
+    digest_reader_css,
+    digest_reader_script,
+    digest_reader_sdk_script_tag,
+    digest_reader_toolbar_inner,
+    digest_summary_controls_inner,
+)
+from digest_rebuild_embed import (
+    digest_rebuild_css,
+    digest_rebuild_script,
+    digest_rebuild_toolbar_inner,
+)
+import groq_summary as groq
+import gemini_summary
+from news_filters import (
+    effective_cap,
+    is_excluded,
+    load_config_exclude_keywords,
+    parse_cli_keywords,
+    parse_max_items,
+)
+
+# Summary providers selectable via --summary-provider / SUMMARY_PROVIDER.
+_SUMMARY_PROVIDERS = {"groq": groq, "gemini": gemini_summary}
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_DEFAULT_FEEDS_PATH = _REPO_ROOT / "config" / "weekly_news_feeds.json"
+
+# Gemini must pick exactly one label (Vietnamese) per article
+VIETNAM_CATEGORY_LABELS: tuple[str, ...] = (
+    "Thời sự",
+    "Kinh tế",
+    "Thế giới",
+    "Pháp luật",
+    "Công nghệ",
+    "Thể thao",
+    "Văn hóa – Giải trí",
+    "Đời sống",
+    "Sức khỏe",
+    "Giáo dục",
+    "Môi trường",
+    "Khác",
+)
+
+# Items are ordered by feed sequence in the config, then newest-first within each feed.
+# The first feed listed in the config leads and forms the highlighted "Tin nổi bật" section.
+
+_TAG_RE = re.compile(r"<[^>]+>")
+_JSON_FENCE_RE = re.compile(r"^```(?:json)?\s*", re.I | re.M)
+_JSON_FENCE_TAIL_RE = re.compile(r"\s*```\s*$", re.M)
+_RETRY_IN_RE = re.compile(r"retry in ([\d.]+)\s*s", re.I)
+
+
+@dataclass(frozen=True)
+class WeeklyNewsItem:
+    source_id: str
+    source_name: str
+    topic: str
+    summary: str
+    category: str
+    link: str
+    published: str | None
+    summarized: bool = False  # True once an LLM summary replaced the RSS description
+
+
+def default_feeds_config_path() -> Path:
+    return _DEFAULT_FEEDS_PATH
+
+
+def load_feeds(path: Path) -> dict[str, tuple[str, str, list[str], int | None]]:
+    """Returns feed_id -> (title, primary_feed_url, extra_fallback_urls, per-feed max_items)."""
+    if not path.is_file():
+        raise FileNotFoundError(f"Feeds config not found: {path}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    raw = data.get("feeds")
+    if not isinstance(raw, dict) or not raw:
+        raise ValueError(f"Config {path} must contain a non-empty 'feeds' object.")
+    out: dict[str, tuple[str, str, list[str], int | None]] = {}
+    for feed_id, meta in raw.items():
+        key = str(feed_id).strip().lower()
+        if not key:
+            continue
+        if not isinstance(meta, dict):
+            raise ValueError(f"Feed '{feed_id}': value must be an object with title and feed_url.")
+        title = (meta.get("title") or meta.get("name") or "").strip()
+        url = (meta.get("feed_url") or meta.get("url") or "").strip()
+        if not title or not url:
+            raise ValueError(f"Feed '{key}': requires non-empty 'title' and 'feed_url'.")
+        fb_raw = meta.get("feed_url_fallbacks") or meta.get("fallback_feed_urls") or []
+        fallbacks: list[str] = []
+        if isinstance(fb_raw, list):
+            fallbacks = [str(u).strip() for u in fb_raw if str(u).strip()]
+        out[key] = (title, url, fallbacks, parse_max_items(meta))
+    return out
+
+
+def strip_html(text: str, max_len: int) -> str:
+    if not text:
+        return ""
+    plain = _TAG_RE.sub(" ", text)
+    plain = html_module.unescape(plain)
+    plain = re.sub(r"\s+", " ", plain).strip()
+    if len(plain) > max_len:
+        plain = plain[: max_len - 1].rsplit(" ", 1)[0] + "…"
+    return plain
+
+
+def normalize_url(url: str) -> str:
+    if not url:
+        return ""
+    p = urlparse(url.strip())
+    q = [(k, v) for k, v in parse_qsl(p.query, keep_blank_values=True) if not k.lower().startswith("utm_")]
+    new_query = urlencode(q)
+    path = (p.path or "/").rstrip("/") or "/"
+    return urlunparse((p.scheme, p.netloc.lower(), path, p.params, new_query, ""))
+
+
+def entry_link(entry: feedparser.FeedParserDict) -> str:
+    if entry.get("link"):
+        return str(entry.link)
+    for link in entry.get("links", []) or []:
+        if link.get("rel") == "alternate" and link.get("href"):
+            return str(link["href"])
+    return ""
+
+
+def _normalize_nonstandard_gmt_offset(s: str) -> str:
+    """RFC822 uses +0700; some VN feeds emit GMT+7 which breaks feedparser."""
+    s = re.sub(
+        r"\bGMT\+(\d{1,2})\b",
+        lambda m: f"+{int(m.group(1)):02d}00",
+        s,
+        flags=re.I,
+    )
+    s = re.sub(
+        r"\bGMT-(\d{1,2})\b",
+        lambda m: f"-{int(m.group(1)):02d}00",
+        s,
+        flags=re.I,
+    )
+    return s
+
+
+# Tuổi Trẻ home.rss emits US-style local timestamps, e.g. "9/21/2026 2:15:00 PM"
+# (M/D/YYYY, 12-hour, no timezone). These are Vietnam local time (UTC+7).
+_VN_TZ = timezone(timedelta(hours=7))
+_MDY_12H_FORMATS = ("%m/%d/%Y %I:%M:%S %p", "%m/%d/%Y %I:%M %p")
+
+
+def _parse_mdy_12h_local(s: str) -> datetime | None:
+    """Parse "M/D/YYYY h:mm:ss AM/PM" (Tuổi Trẻ home.rss) as Vietnam local time -> UTC."""
+    for fmt in _MDY_12H_FORMATS:
+        try:
+            dt = datetime.strptime(s, fmt).replace(tzinfo=_VN_TZ)
+        except ValueError:
+            continue
+        return dt.astimezone(timezone.utc)
+    return None
+
+
+def parse_loose_rss_datetime(raw: str) -> datetime | None:
+    """Parse published/updated strings when feedparser leaves *_parsed empty (e.g. Tuổi Trẻ)."""
+    s = (raw or "").strip()
+    if not s:
+        return None
+    # Normalize narrow/no-break spaces that some feeds put before AM/PM.
+    s = s.replace(" ", " ").replace("\xa0", " ")
+    s = re.sub(r"\s+", " ", s)
+    s = _normalize_nonstandard_gmt_offset(s)
+    try:
+        dt = email.utils.parsedate_to_datetime(s)
+    except (TypeError, ValueError):
+        dt = None
+    if dt is None:
+        return _parse_mdy_12h_local(s)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def entry_published_iso(entry: feedparser.FeedParserDict) -> str | None:
+    t = entry.get("published_parsed") or entry.get("updated_parsed")
+    if t:
+        try:
+            dt = datetime(*t[:6], tzinfo=timezone.utc)
+            return dt.isoformat()
+        except (TypeError, ValueError):
+            pass
+    raw = entry.get("published") or entry.get("updated")
+    if raw:
+        dt = parse_loose_rss_datetime(str(raw))
+        if dt:
+            return dt.isoformat()
+    return None
+
+
+def parse_item_datetime(item: WeeklyNewsItem) -> datetime | None:
+    if not item.published:
+        return None
+    try:
+        return datetime.fromisoformat(item.published.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def filter_by_recent_days(items: list[WeeklyNewsItem], days: int) -> tuple[list[WeeklyNewsItem], int, int]:
+    if days < 1:
+        raise ValueError("--days must be >= 1")
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    kept: list[WeeklyNewsItem] = []
+    dropped_no_date = 0
+    dropped_old = 0
+    for it in items:
+        dt = parse_item_datetime(it)
+        if dt is None:
+            dropped_no_date += 1
+            continue
+        if dt < cutoff:
+            dropped_old += 1
+            continue
+        kept.append(it)
+    return kept, dropped_no_date, dropped_old
+
+
+# Browser UA: some feeds 403 a bot-identifying User-Agent.
+_DEFAULT_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/128.0.0.0 Safari/537.36"
+)
+_ARTICLE_PAGE_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
+)
+
+
+def _maybe_decompress_feed_body(raw: bytes) -> bytes:
+    """Decode gzip-wrapped bodies when the server omits transparent urllib decoding."""
+    if len(raw) >= 2 and raw[0] == 0x1F and raw[1] == 0x8B:
+        try:
+            return gzip.decompress(raw)
+        except OSError:
+            pass
+    return raw
+
+
+def fetch_feed_bytes(url: str, timeout: int) -> bytes:
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": _DEFAULT_UA,
+            "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
+            "Accept-Language": "vi-VN,vi;q=0.9,en;q=0.8",
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+            return _maybe_decompress_feed_body(resp.read())
+    except urllib.error.HTTPError as exc:
+        raise RuntimeError(f"HTTP {exc.code} for {url}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Network error for {url}: {exc.reason}") from exc
+
+
+def parse_feed(source_id: str, source_name: str, url: str, timeout: int) -> list[WeeklyNewsItem]:
+    raw = fetch_feed_bytes(url, timeout)
+    parsed = feedparser.parse(raw)
+    if getattr(parsed, "bozo_exception", None) and not parsed.entries:
+        raise RuntimeError(f"{source_name}: feed error ({parsed.bozo_exception})")
+
+    items: list[WeeklyNewsItem] = []
+    for entry in parsed.entries:
+        title = strip_html(str(entry.get("title") or ""), 400)
+        if not title:
+            continue
+        raw_summary = (
+            entry.get("summary")
+            or entry.get("description")
+            or (entry.get("content", [{}])[0].get("value") if entry.get("content") else "")
+            or ""
+        )
+        summary = strip_html(str(raw_summary), 500)
+        if not summary:
+            summary = "(Không có mô tả RSS; mở bài để đọc.)"
+
+        link = entry_link(entry)
+        if not link:
+            continue
+
+        items.append(
+            WeeklyNewsItem(
+                source_id=source_id,
+                source_name=source_name,
+                topic=title,
+                summary=summary,
+                category="Chưa phân loại",
+                link=link,
+                published=entry_published_iso(entry),
+            )
+        )
+    if not items:
+        raise RuntimeError(f"{source_name}: no entries parsed from {url}")
+    return items
+
+
+def parse_feed_try_urls(
+    source_id: str, source_name: str, urls: list[str], timeout: int
+) -> list[WeeklyNewsItem]:
+    """Try each RSS URL until one yields items (primary first, then fallbacks)."""
+    errs: list[str] = []
+    for u in urls:
+        u = u.strip()
+        if not u:
+            continue
+        try:
+            return parse_feed(source_id, source_name, u, timeout)
+        except Exception as exc:  # noqa: BLE001
+            errs.append(f"{u}: {exc}")
+    raise RuntimeError(f"{source_name}: all feed URLs failed ({len(errs)}): " + " | ".join(errs))
+
+
+def _item_timestamp(item: WeeklyNewsItem) -> float:
+    """Epoch seconds for an item's published date (0.0 when missing/unparseable)."""
+    if item.published:
+        try:
+            return datetime.fromisoformat(item.published.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return 0.0
+    return 0.0
+
+
+def _is_lead_item(item: WeeklyNewsItem, lead_source_id: str | None) -> bool:
+    """True when the item comes from the digest's lead feed (first listed in the config)."""
+    if not lead_source_id:
+        return False
+    return item.source_id.strip().lower() == lead_source_id.strip().lower()
+
+
+def gather(
+    feeds: dict[str, tuple[str, str, list[str], int | None]],
+    source_ids: list[str],
+    per_source: int,
+    timeout: int,
+    pause_s: float,
+    exclude_keywords: list[str] | None = None,
+) -> list[WeeklyNewsItem]:
+    source_ids = [s.strip().lower() for s in source_ids if s.strip()]
+    collected: list[WeeklyNewsItem] = []
+    errors: list[str] = []
+    keywords = exclude_keywords or []
+    excluded_count = 0
+
+    for i, sid in enumerate(source_ids):
+        if sid not in feeds:
+            errors.append(f"Unknown source id: {sid}")
+            continue
+        name, url, fallbacks, feed_max = feeds[sid]
+        try:
+            urls = [url] + list(fallbacks)
+            parsed = parse_feed_try_urls(sid, name, urls, timeout)
+            kept = [it for it in parsed if not is_excluded(f"{it.topic} {it.summary}", keywords)]
+            excluded_count += len(parsed) - len(kept)
+            collected.extend(kept[: effective_cap(feed_max, per_source)])
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{name}: {exc}")
+        if pause_s > 0 and i < len(source_ids) - 1:
+            time.sleep(pause_s)
+
+    if excluded_count:
+        print(f"Exclude keywords: dropped {excluded_count} item(s) matching {keywords}.", file=sys.stderr)
+
+    if errors:
+        print("Warnings:", file=sys.stderr)
+        for e in errors:
+            print(f"  - {e}", file=sys.stderr)
+
+    # Order by feed sequence in the config (source_ids order), then newest-first within each feed.
+    # Dedupe by normalized URL: the earlier feed in the config keeps a shared article.
+    rank = {sid: i for i, sid in enumerate(source_ids)}
+    seen: set[str] = set()
+    deduped: list[WeeklyNewsItem] = []
+    for it in sorted(
+        collected,
+        key=lambda it: (rank.get(it.source_id.strip().lower(), len(rank)), -_item_timestamp(it), it.link),
+    ):
+        nu = normalize_url(it.link)
+        if nu in seen:
+            continue
+        seen.add(nu)
+        deduped.append(it)
+    return deduped
+
+
+def strip_json_fenced_text(text: str) -> str:
+    t = text.strip()
+    if t.startswith("```"):
+        t = _JSON_FENCE_RE.sub("", t, count=1)
+        t = _JSON_FENCE_TAIL_RE.sub("", t)
+    return t.strip()
+
+
+def _is_gemini_json_retryable(exc: BaseException) -> bool:
+    if isinstance(exc, json.JSONDecodeError):
+        return True
+    msg = str(exc).lower()
+    return (
+        "unterminated string" in msg
+        or "invalid control character" in msg
+        or "invalid \\escape" in msg
+        or "empty text" in msg
+        or "returned empty" in msg
+    )
+
+
+def _gemini_model_candidates(primary: str, fallback: str | None) -> list[str]:
+    """[primary, *fallbacks] deduped. `fallback` may be a comma-separated chain; each Groq
+    model has its own daily token budget, so more candidates = more daily headroom."""
+    out: list[str] = []
+    for m in [primary or ""] + (fallback or "").split(","):
+        m = m.strip()
+        if m and not any(m.lower() == e.lower() for e in out):
+            out.append(m)
+    return out
+
+
+def _parse_gemini_json_list(raw_text: str) -> list[dict]:
+    parsed = json.loads(strip_json_fenced_text(raw_text))
+    if isinstance(parsed, dict):
+        for key in ("articles", "items", "results", "output"):
+            if key in parsed and isinstance(parsed[key], list):
+                parsed = parsed[key]
+                break
+    if not isinstance(parsed, list):
+        raise RuntimeError("Gemini JSON must be an array (or an object wrapping an array).")
+    return parsed
+
+
+def _normalize_category(raw: str) -> str:
+    t = (raw or "").strip()
+    if t in VIETNAM_CATEGORY_LABELS:
+        return t
+    for lab in VIETNAM_CATEGORY_LABELS:
+        if lab.lower() == t.lower():
+            return lab
+    return "Khác"
+
+
+def _rows_to_maps(rows: list) -> tuple[dict[int, dict], dict[str, dict]]:
+    by_index: dict[int, dict] = {}
+    by_link: dict[str, dict] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        idx = row.get("index")
+        if isinstance(idx, bool):
+            continue
+        if isinstance(idx, float) and idx.is_integer():
+            idx = int(idx)
+        if isinstance(idx, int) and idx >= 0:
+            by_index[idx] = row
+        lk = row.get("link")
+        if isinstance(lk, str) and lk.strip():
+            by_link[normalize_url(lk.strip())] = row
+    return by_index, by_link
+
+
+def _truncate_for_gemini(text: str, max_chars: int) -> str:
+    t = (text or "").strip()
+    if len(t) > max_chars:
+        return t[: max_chars - 1].rsplit(" ", 1)[0] + "…"
+    return t
+
+
+def _fetch_article_bodies_chunk_vn(
+    out: list[WeeklyNewsItem],
+    indices: list[int],
+    *,
+    timeout: int,
+    max_bytes: int,
+    max_chars: int,
+    pause_s: float,
+    user_agent: str,
+    accept_language: str,
+) -> dict[int, str]:
+    from article_fetch import fetch_article_plain_text
+
+    bodies: dict[int, str] = {}
+    for ii, i in enumerate(indices):
+        if pause_s > 0 and ii > 0:
+            time.sleep(pause_s)
+        it = out[i]
+        try:
+            text = fetch_article_plain_text(
+                it.link,
+                timeout=timeout,
+                max_bytes=max_bytes,
+                max_chars=max_chars,
+                user_agent=user_agent,
+                accept_language=accept_language,
+            )
+            if len(text.strip()) < 60:
+                raise RuntimeError("extracted article text too short")
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"Cảnh báo: không lấy được nội dung bài [{it.source_name}] {it.link}: {exc}",
+                file=sys.stderr,
+            )
+            bodies[i] = (it.summary or "").strip() or "(Không có nội dung.)"
+        else:
+            bodies[i] = text
+    return bodies
+
+
+def _gemini_payload_rows_vn(
+    out: list[WeeklyNewsItem],
+    indices: list[int],
+    bodies: dict[int, str],
+    *,
+    full_article: bool,
+    body_char_cap: int,
+) -> list[dict]:
+    payload: list[dict] = []
+    for i in indices:
+        it = out[i]
+        body = _truncate_for_gemini(bodies.get(i, it.summary), body_char_cap)
+        row: dict = {
+            "index": i,
+            "link": it.link,
+            "source": it.source_name,
+            "title": it.topic,
+        }
+        if full_article:
+            row["article_plain_text"] = body
+        else:
+            row["rss_excerpt"] = body
+        payload.append(row)
+    return payload
+
+
+def groq_weekly_enrich(
+    items: list[WeeklyNewsItem],
+    *,
+    api_key: str,
+    model: str,
+    model_fallback: str | None = None,
+    full_article: bool = True,
+    article_fetch_timeout_s: int = 30,
+    article_max_bytes: int = 2_500_000,
+    article_fetch_pause_s: float = 0.35,
+    article_user_agent: str = _ARTICLE_PAGE_UA,
+    article_accept_language: str = "vi-VN,vi;q=0.9,en;q=0.8",
+    max_article_chars: int = 16_000,
+    max_excerpt_chars: int = 480,
+    max_output_tokens: int,
+    request_timeout_s: int,
+    chunk_size: int,
+    chunk_pause_s: float,
+    max_retries: int,
+    summary_tpm: int | None = None,
+    svc=groq,  # summary provider module (groq_summary or gemini_summary)
+) -> tuple[list[WeeklyNewsItem], bool]:
+    if not items:
+        return items, False
+    if summary_tpm is None:
+        summary_tpm = svc.DEFAULT_TPM_LIMIT
+
+    cats_literal = " | ".join(VIETNAM_CATEGORY_LABELS)
+    if full_article:
+        instructions = (
+            "Bạn là biên tập viên tin tức Việt Nam. Mỗi mục có metadata và `article_plain_text`: "
+            "văn bản thu được từ trang bài báo (đã loại bớt menu/quảng cáo; có thể không đầy đủ). "
+            "Dựa vào đó và tiêu đề để viết summary và chọn category; không bịa sự kiện, con số hay trích dẫn "
+            "không có trong nội dung. Nếu văn bản quá mỏng hoặc không rõ, nêu điều đã được hỗ trợ và giữ thận trọng.\n\n"
+            "Trả về DUY NHẤT một mảng JSON (không dùng markdown). Mỗi phần tử là object với các khóa đúng: "
+            '"index" (số nguyên khớp input), "link" (chuỗi giống input), '
+            '"summary" (2–4 câu tiếng Việt, dễ đọc), '
+            f'"category" (chuỗi, PHẢI là một trong các nhãn sau, đúng chính tả: {cats_literal}).\n\n'
+            "Trong summary/category chỉ dùng chuỗi JSON hợp lệ: không xuống dòng thô trong string; dùng \\n nếu cần.\n\n"
+            "Mảng phải cùng độ dài và cùng các index như danh sách đầu vào.\n\n"
+            "INPUT_ARTICLES_JSON:\n"
+        )
+    else:
+        instructions = (
+            "Bạn là biên tập viên tin tức Việt Nam. Bạn chỉ nhận tiêu đề, nguồn và đoạn mô tả RSS — không có toàn văn bài báo. "
+            "Không bịa sự kiện, con số hay trích dẫn không có trong dữ liệu.\n\n"
+            "Trả về DUY NHẤT một mảng JSON (không dùng markdown). Mỗi phần tử là object với các khóa đúng: "
+            '"index" (số nguyên khớp input), "link" (chuỗi giống input), '
+            '"summary" (2–4 câu tiếng Việt, dễ đọc), '
+            f'"category" (chuỗi, PHẢI là một trong các nhãn sau, đúng chính tả: {cats_literal}).\n\n'
+            "Trong summary/category chỉ dùng chuỗi JSON hợp lệ: không xuống dòng thô trong string; dùng \\n nếu cần.\n\n"
+            "Mảng phải cùng độ dài và cùng các index như danh sách đầu vào.\n\n"
+            "INPUT_ARTICLES_JSON:\n"
+        )
+
+    n = len(items)
+    if chunk_size <= 0 or chunk_size > n:
+        chunk_size = n
+
+    out = list(items)
+    used_fallback = False
+    model_candidates = _gemini_model_candidates(model, model_fallback)
+    # Model đã hết hạn mức ngày trong lần chạy này — bỏ qua ở các chunk sau (hạn mức ngày
+    # không hồi trong vài phút, thử lại chỉ tốn thêm một request rồi lại lỗi).
+    exhausted_models: set[str] = set()
+    # Bucket TPM trực tiếp từ header phản hồi Groq, dùng để giãn nhịp request (xem dưới).
+    rate_limit = svc.RateLimit()
+
+    for start in range(0, n, chunk_size):
+        end = min(start + chunk_size, n)
+        indices = list(range(start, end))
+        if full_article:
+            bodies = _fetch_article_bodies_chunk_vn(
+                out,
+                indices,
+                timeout=article_fetch_timeout_s,
+                max_bytes=article_max_bytes,
+                max_chars=max_article_chars,
+                pause_s=article_fetch_pause_s,
+                user_agent=article_user_agent,
+                accept_language=article_accept_language,
+            )
+        else:
+            bodies = {i: out[i].summary for i in indices}
+        # Keep each request under the free-tier TPM: small output reservation + input trimmed to fit.
+        out_tokens = svc.output_token_budget(len(indices), max_output_tokens)
+        body_char_cap = min(
+            max_article_chars if full_article else max_excerpt_chars,
+            svc.input_char_budget_per_item(len(indices), output_tokens=out_tokens, tpm_limit=summary_tpm),
+        )
+        payload = _gemini_payload_rows_vn(
+            out,
+            indices,
+            bodies,
+            full_article=full_article,
+            body_char_cap=body_char_cap,
+        )
+        prompt = instructions + json.dumps(payload, ensure_ascii=False)
+
+        available = [m for m in model_candidates if m not in exhausted_models]
+        if not available:
+            print(
+                f"{svc.DISPLAY_NAME}: mọi model đã hết hạn mức ngày; giữ trích đoạn RSS từ chunk "
+                f"{start}-{end - 1} trở đi.",
+                file=sys.stderr,
+            )
+            break
+
+        chunk_ok = False
+        last_err: BaseException | None = None
+
+        for mi, active_model in enumerate(available):
+            for attempt in range(max_retries):
+                tokens_this_chunk = out_tokens
+
+                try:
+                    raw_text = svc.chat_text(
+                        token=api_key,
+                        model=active_model,
+                        prompt=prompt,
+                        max_tokens=tokens_this_chunk,
+                        temperature=0.35,
+                        timeout_s=request_timeout_s,
+                        reasoning_effort="low",
+                        rate_out=rate_limit,
+                    )
+                    if not raw_text:
+                        raise RuntimeError(f"{svc.DISPLAY_NAME} returned empty text.")
+
+                    rows = _parse_gemini_json_list(raw_text)
+                    if len(rows) != len(indices):
+                        print(
+                            f"Warning: {svc.DISPLAY_NAME} returned {len(rows)} rows for chunk {start}-{end - 1}, "
+                            f"expected {len(indices)}; merging partial.",
+                            file=sys.stderr,
+                        )
+                    by_i, by_l = _rows_to_maps(rows)
+                    for i in indices:
+                        it = out[i]
+                        row = by_i.get(i) or by_l.get(normalize_url(it.link))
+                        if not row:
+                            continue
+                        summary = str(row.get("summary") or "").strip()
+                        cat = _normalize_category(str(row.get("category") or ""))
+                        if not summary:
+                            continue
+                        out[i] = replace(out[i], summary=summary[:4000], category=cat, summarized=True)
+                    chunk_ok = True
+                    if active_model != model_candidates[0]:
+                        used_fallback = True
+                        print(
+                            f"{svc.DISPLAY_NAME} chunk {start}-{end - 1}: OK (fallback model {active_model!r}).",
+                            file=sys.stderr,
+                        )
+                    break
+                except Exception as exc:  # noqa: BLE001 — retry transient/JSON, else next model
+                    last_err = exc
+                    if svc.is_daily_quota(exc) or svc.is_model_unavailable(exc):
+                        # Hết hạn mức ngày (không hồi) hoặc model 404/không khả dụng: loại model
+                        # này khỏi lần chạy và chuyển sang model kế tiếp.
+                        exhausted_models.add(active_model)
+                        reason = "hết hạn mức ngày" if svc.is_daily_quota(exc) else "model không khả dụng (404)"
+                        print(
+                            f"{svc.DISPLAY_NAME} {reason} ở chunk {start}-{end - 1} (model {active_model!r}: {exc!s}); "
+                            "loại model này khỏi lần chạy.",
+                            file=sys.stderr,
+                        )
+                        break
+                    if svc.is_transient(exc) and attempt < max_retries - 1:
+                        delay = svc.retry_sleep_seconds(exc, attempt)
+                        print(
+                            f"{svc.DISPLAY_NAME} lỗi tạm thời; chunk {start}-{end - 1}, chờ {delay:.1f}s "
+                            f"(lần {attempt + 2}/{max_retries}, model={active_model!r}).",
+                            file=sys.stderr,
+                        )
+                        time.sleep(delay)
+                        continue
+                    if _is_gemini_json_retryable(exc) and attempt < max_retries - 1:
+                        delay = min(5.0 * (1.6**attempt), 90.0)
+                        print(
+                            f"{svc.DISPLAY_NAME} JSON lỗi ({exc!s}); chunk {start}-{end - 1}, chờ {delay:.1f}s "
+                            f"(lần {attempt + 2}/{max_retries}, max_output_tokens={tokens_this_chunk}).",
+                            file=sys.stderr,
+                        )
+                        time.sleep(delay)
+                        continue
+                    break
+
+            if chunk_ok:
+                break
+
+            if mi < len(available) - 1:
+                print(
+                    f"{svc.DISPLAY_NAME} chunk {start}-{end - 1}: model {active_model!r} thất bại ({last_err!s}); "
+                    f"thử {available[mi + 1]!r}.",
+                    file=sys.stderr,
+                )
+
+        if not chunk_ok:
+            assert last_err is not None
+            if svc.is_daily_quota(last_err):
+                # Tất cả model đã hết hạn mức ngày — các chunk sau cũng sẽ lỗi.
+                # Giữ trích đoạn RSS cho phần còn lại thay vì làm hỏng cả bản build.
+                print(
+                    f"{svc.DISPLAY_NAME} hết hạn mức ngày ở chunk {start}-{end - 1}; giữ trích đoạn RSS "
+                    "cho các bài còn lại.",
+                    file=sys.stderr,
+                )
+                break
+            # Một chunk lỗi trên mọi model (vd: trả về rỗng): chỉ giữ trích đoạn RSS cho
+            # các bài này rồi tiếp tục — không bao giờ vứt bỏ các chunk đã tóm tắt thành công.
+            print(
+                f"{svc.DISPLAY_NAME} chunk {start}-{end - 1}: mọi model đều lỗi ({last_err!s}); "
+                f"giữ trích đoạn RSS cho {len(indices)} bài này và tiếp tục.",
+                file=sys.stderr,
+            )
+            continue
+
+        if end < n:
+            # Giãn nhịp theo kích thước token thực của request (len(prompt) ~= chars/2 + output)
+            # để không vượt TPM dù chunk nhỏ (Groq) hay lớn (Gemini).
+            est_req_tokens = int(len(prompt) / 2) + out_tokens
+            delay = svc.pace_delay_seconds(
+                rate_limit, est_req_tokens, tpm_limit=summary_tpm, fallback_s=chunk_pause_s
+            )
+            if delay > 0:
+                time.sleep(delay)
+
+    return out, used_fallback
+
+
+def generate_overall_briefing(
+    items: list[WeeklyNewsItem],
+    *,
+    svc,
+    api_key: str,
+    model: str,
+    model_fallback: str | None,
+    request_timeout_s: int,
+    summary_tpm: int,
+) -> str | None:
+    """One LLM call: synthesize a short Vietnamese briefing over all item summaries."""
+    if not items:
+        return None
+    # Drop exact-duplicate titles (the same story is often syndicated across feeds).
+    seen: set[str] = set()
+    parts: list[str] = []
+    for it in items:
+        key = re.sub(r"\s+", " ", (it.topic or "").strip().lower())
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        parts.append(f"{len(parts) + 1}. [{it.category}] {it.topic}: {(it.summary or '').strip()}")
+    out_tokens = 6000  # enough for a full multi-paragraph briefing plus the model's thinking overhead
+    cap_chars = max(2000, int((summary_tpm * 0.8 - out_tokens - 400) * 2))  # keep the request under TPM
+    prompt = (
+        "Bạn là biên tập viên thời sự. Dưới đây là danh sách TẤT CẢ tin trong ngày (số thứ tự, [chủ đề], "
+        "tiêu đề: tóm tắt). Hãy viết BẢN TỔNG HỢP bằng tiếng Việt, BAO QUÁT tất cả diễn biến chính, nhóm theo "
+        "chủ đề, mỗi chủ đề một đoạn ngắn; không bỏ sót tin quan trọng và không lặp lại tin trùng. Văn phong "
+        "trung lập. Chỉ trả về văn bản thuần (các đoạn cách nhau bằng dòng trống), không markdown, không tiêu đề.\n\n"
+        "DANH SÁCH TIN:\n" + "\n".join(parts)[:cap_chars]
+    )
+    for m in _gemini_model_candidates(model, model_fallback):
+        for attempt in range(3):
+            try:
+                txt = svc.chat_text(
+                    token=api_key, model=m, prompt=prompt, max_tokens=out_tokens,
+                    temperature=0.4, timeout_s=request_timeout_s, reasoning_effort="minimal",
+                )
+                if txt and txt.strip():
+                    return txt.strip()
+                break
+            except Exception as exc:  # noqa: BLE001
+                if svc.is_daily_quota(exc) or svc.is_model_unavailable(exc):
+                    break
+                if svc.is_transient(exc) and attempt < 2:
+                    time.sleep(svc.retry_sleep_seconds(exc, attempt))
+                    continue
+                break
+    return None
+
+
+def _category_slug(cat: str) -> str:
+    s = re.sub(r"[^\w\-]+", "-", cat.lower(), flags=re.UNICODE)
+    return re.sub(r"-+", "-", s).strip("-") or "khac"
+
+
+def _weekly_card_html(it: WeeklyNewsItem, lead_source_id: str | None = None) -> str:
+    pub = html_module.escape(it.published or "không rõ ngày")
+    topic = html_module.escape(it.topic)
+    src = html_module.escape(it.source_name)
+    summary = html_module.escape(it.summary)
+    cat = html_module.escape(it.category)
+    slug = html_module.escape(_category_slug(it.category))
+    link_href = html_module.escape(it.link, quote=True)
+    link_text = html_module.escape(it.link)
+    time_attr = ""
+    if it.published:
+        time_attr = f' datetime="{html_module.escape(it.published)}"'
+    dt = parse_item_datetime(it)
+    data_ts = f' data-ts="{int(dt.timestamp() * 1000)}"' if dt else ""
+    top_cls = " card-top" if _is_lead_item(it, lead_source_id) else ""
+    nosum_badge = "" if it.summarized else '<span class="badge badge-nosum" title="Chưa tóm tắt bằng AI; đang hiển thị mô tả RSS.">Chưa tóm tắt</span>'
+    sum_heading = "Tóm tắt" if it.summarized else "Mô tả (RSS)"
+    return (
+        f"""<article class="card{top_cls}" data-category="{slug}"{data_ts}>
+  <header class="card-head">
+    <span class="badge">{cat}</span>
+    {nosum_badge}
+    <span class="src">{src}</span>
+    <time{time_attr}>{pub}</time>
+  </header>
+  <h2 class="topic"><a href="{link_href}" rel="noopener noreferrer">{topic}</a></h2>
+  <section class="block"><h3>{sum_heading}</h3><p>{summary}</p></section>
+  <p class="linkrow"><a class="full" href="{link_href}" rel="noopener noreferrer">{link_text}</a></p>
+</article>"""
+    )
+
+
+def build_html(
+    items: list[WeeklyNewsItem],
+    *,
+    generated_at: datetime | None = None,
+    server_days: int | None = None,
+    summary_model: str | None = None,
+    summary_provider: str = "Groq",
+    summary_overview: str | None = None,
+    summary_article_pages: bool = False,
+    lead_source_id: str | None = None,
+    lead_source_name: str | None = None,
+    read_news_azure_voice: str = READ_NEWS_AZURE_VOICE_VI_DEFAULT,
+    read_news_azure_voice_fallback: str = READ_NEWS_AZURE_VOICE_FALLBACK_VI_DEFAULT,
+    read_news_azure_region: str | None = None,
+) -> str:
+    when = (generated_at or datetime.now(timezone.utc)).strftime("%Y-%m-%d %H:%M UTC")
+    day_default = str(server_days if server_days is not None else 7)
+    filter_note = (
+        f"Lọc theo ngày (server): {server_days} ngày gần nhất (UTC), chỉ bài có ngày parse được."
+        if server_days is not None
+        else "Không lọc ngày trên server; dùng ô bên dưới để lọc trong trình duyệt."
+    )
+    lead_note = (
+        f" Tin từ nguồn dẫn đầu ({lead_source_name}) hiển thị trước trong mục tin nổi bật."
+        if lead_source_name
+        else ""
+    )
+    if summary_model:
+        if summary_article_pages:
+            ai_note = (
+                f"Tóm tắt và nhóm chủ đề: {summary_provider} ({summary_model}), theo văn bản trích từ trang bài báo "
+                f"(không chỉ RSS).{lead_note}"
+            )
+        else:
+            ai_note = (
+                f"Tóm tắt và nhóm chủ đề: {summary_provider} ({summary_model}), theo đoạn RSS.{lead_note}"
+            )
+    else:
+        ai_note = f"Tóm tắt từ RSS; nhóm chủ đề: Chưa phân loại (chạy với --summarize để dùng AI).{lead_note}"
+
+    reader_hint = (
+        " Nút Đọc tin: Azure AI Speech đọc các bản tóm tắt trên trang (giọng "
+        + html_module.escape(read_news_azure_voice)
+        + " / dự phòng "
+        + html_module.escape(read_news_azure_voice_fallback)
+        + "); nhập khóa Azure + vùng ở ô phía trên."
+    )
+
+    if summary_overview and summary_overview.strip():
+        paras = [p.strip() for p in re.split(r"\n+", summary_overview.strip()) if p.strip()]
+        paras_html = "".join(f"<p>{html_module.escape(p)}</p>" for p in (paras or [summary_overview.strip()]))
+        summary_pane_html = (
+            '<div class="summary-wrap">'
+            + digest_summary_controls_inner(lang="vi")
+            + f'<div id="summaryText">{paras_html}</div>'
+            + "</div>"
+        )
+    else:
+        summary_pane_html = '<p class="summary-empty">Chưa có bản tổng hợp (chạy với --summarize để tạo bằng AI).</p>'
+
+    idx = 0
+    while idx < len(items) and _is_lead_item(items[idx], lead_source_id):
+        idx += 1
+    top_sec, rest_sec = items[:idx], items[idx:]
+    blocks: list[str] = []
+    if top_sec:
+        top_heading = f"Tin nổi bật — {html_module.escape(lead_source_name)}" if lead_source_name else "Tin nổi bật"
+        blocks.append(f'<h2 class="digest-section">{top_heading}</h2>')
+        blocks.extend(_weekly_card_html(x, lead_source_id) for x in top_sec)
+    if rest_sec:
+        if top_sec:
+            blocks.append('<h2 class="digest-section digest-section-muted">Tin từ các nguồn khác</h2>')
+        blocks.extend(_weekly_card_html(x, lead_source_id) for x in rest_sec)
+    body = "\n".join(blocks)
+    return f"""<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Tổng hợp tin hàng tuần</title>
+  <style>
+    :root {{
+      --bg: #0f1419;
+      --card: #1a2332;
+      --text: #e7ecf3;
+      --muted: #9fb0c8;
+      --accent: #5bd59b;
+      --border: #2a3a52;
+      --badge: #3d6b55;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.55;
+    }}
+    .wrap {{ max-width: 52rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }}
+    h1 {{ font-size: 1.35rem; font-weight: 650; margin: 0 0 0.25rem; }}
+    .meta {{ color: var(--muted); font-size: 0.9rem; margin-bottom: 0.75rem; }}
+    .submeta {{ display: inline-block; margin-top: 0.35rem; font-size: 0.82rem; color: #8fa6bf; line-height: 1.45; }}
+    .toolbar {{
+      display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem;
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 0.75rem 1rem; margin-bottom: 1.25rem; font-size: 0.92rem;
+    }}
+    .toolbar label {{ color: var(--muted); display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }}
+    .toolbar input[type="number"] {{
+      width: 4.5rem; padding: 0.35rem 0.45rem; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--bg); color: var(--text); font-size: 0.95rem;
+    }}
+    .toolbar button {{
+      cursor: pointer; border: none; border-radius: 6px; padding: 0.4rem 0.85rem;
+      font-size: 0.88rem; font-weight: 600;
+    }}
+    .toolbar .apply {{ background: var(--accent); color: #0a111a; }}
+    .toolbar .reset {{ background: transparent; color: var(--muted); border: 1px solid var(--border); }}
+    .filter-hint {{ width: 100%; font-size: 0.8rem; color: var(--muted); margin: 0.25rem 0 0; }}
+    .card {{
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 1rem 1.15rem 1.1rem; margin-bottom: 1rem;
+    }}
+    .card-head {{ display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: baseline;
+      font-size: 0.82rem; color: var(--muted); margin-bottom: 0.35rem; }}
+    .badge {{ background: var(--badge); color: #dfffea; padding: 0.15rem 0.5rem; border-radius: 6px;
+      font-weight: 650; font-size: 0.78rem; }}
+    .badge-nosum {{ background: transparent; color: #d8a24a; border: 1px solid #6b562f; font-weight: 600; }}
+    .src {{ font-weight: 600; color: var(--accent); margin-left: auto; }}
+    .topic {{ font-size: 1.08rem; margin: 0.35rem 0 0.75rem; line-height: 1.35; }}
+    .topic a {{ color: var(--text); text-decoration: none; }}
+    .topic a:hover {{ text-decoration: underline; color: var(--accent); }}
+    .block h3 {{ margin: 0 0 0.35rem; font-size: 0.72rem; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--muted); font-weight: 650; }}
+    .block p {{ margin: 0; font-size: 0.95rem; color: #d5dde8; }}
+    .linkrow {{ margin: 0.85rem 0 0; word-break: break-all; font-size: 0.85rem; }}
+    a.full {{ color: var(--accent); }}
+    .digest-section {{ font-size: 1.02rem; font-weight: 650; margin: 1.35rem 0 0.65rem; color: var(--accent); letter-spacing: 0.02em; }}
+    .digest-section:first-of-type {{ margin-top: 0.2rem; }}
+    .digest-section-muted {{ color: #8fa6bf; font-size: 0.98rem; }}
+    .card.card-top {{ border-color: #3d5c4a; box-shadow: 0 0 0 1px rgba(91, 213, 155, 0.12); }}
+{digest_reader_css()}
+{digest_rebuild_css()}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Tổng hợp tin hàng tuần</h1>
+    <p class="meta">Cập nhật {html_module.escape(when)} · <span id="visibleCount">{len(items)}</span> bài · <a class="full" href="../archive/">🕘 Lịch sử</a><br/>
+    <span class="submeta">{html_module.escape(ai_note)}</span></p>
+    <div class="tabs" role="tablist">
+      <button type="button" class="tab-btn active" data-tab="pane-news">Tin tức</button>
+      <button type="button" class="tab-btn" data-tab="pane-summary">Tổng hợp</button>
+    </div>
+    <div id="pane-news" class="tab-pane">
+    <div class="toolbar">
+      <label>Hiện bài trong
+        <input type="number" id="dayWindow" min="1" max="3650" value="{day_default}"/>
+        ngày gần nhất
+      </label>
+      <button type="button" class="apply" id="applyDays">Áp dụng</button>
+      <button type="button" class="reset" id="resetDays">Hiện tất cả</button>
+      <p class="filter-hint">{html_module.escape(filter_note)} Bài không có data-ts sẽ bị ẩn khi lọc.{reader_hint}</p>
+{digest_reader_toolbar_inner(lang="vi")}
+{digest_rebuild_toolbar_inner(lang="vi", selected="weekly-news-digest.yml")}
+    </div>
+{body}
+    </div>
+    <div id="pane-summary" class="tab-pane" hidden>
+{summary_pane_html}
+    </div>
+  </div>
+  <script>
+(function() {{
+  function countVisible() {{
+    var n = document.querySelectorAll("article.card:not([hidden])").length;
+    var el = document.getElementById("visibleCount");
+    if (el) el.textContent = n;
+  }}
+  function applyDayFilter() {{
+    var input = document.getElementById("dayWindow");
+    var n = parseInt(input && input.value, 10);
+    if (!input || !isFinite(n) || n < 1) {{ alert("Nhập số ngày dương."); return; }}
+    var cutoff = Date.now() - n * 86400000;
+    document.querySelectorAll("article.card").forEach(function(el) {{
+      var raw = el.getAttribute("data-ts");
+      if (raw === null || raw === "") {{ el.hidden = true; return; }}
+      var ts = parseInt(raw, 10);
+      if (!isFinite(ts)) {{ el.hidden = true; return; }}
+      el.hidden = ts < cutoff;
+    }});
+    countVisible();
+  }}
+  function resetFilter() {{
+    document.querySelectorAll("article.card").forEach(function(el) {{ el.hidden = false; }});
+    countVisible();
+  }}
+  var b1 = document.getElementById("applyDays");
+  var b2 = document.getElementById("resetDays");
+  if (b1) b1.addEventListener("click", applyDayFilter);
+  if (b2) b2.addEventListener("click", resetFilter);
+}})();
+  </script>
+  {digest_reader_sdk_script_tag()}
+  <script>
+{digest_reader_script(
+        lang="vi",
+        voice=read_news_azure_voice,
+        voice_fallback=read_news_azure_voice_fallback,
+        region_default=read_news_azure_region,
+    )}
+  </script>
+  <script>
+{digest_rebuild_script(lang="vi")}
+  </script>
+</body>
+</html>
+"""
+
+
+def format_console(items: list[WeeklyNewsItem]) -> str:
+    lines: list[str] = []
+    for it in items:
+        pub = it.published or "không rõ ngày"
+        lines.append(
+            f"## [{it.category}] [{it.source_name}] {it.topic}\n"
+            f"**Ngày:** {pub}\n"
+            f"**Tóm tắt:** {it.summary}\n"
+            f"**Link:** {it.link}\n"
+        )
+    return "\n".join(lines)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Tổng hợp tin hàng tuần từ RSS (nguồn tùy chọn), tùy chọn Groq/Gemini (tiếng Việt + nhóm).",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument("--feeds-config", type=Path, default=None, help="JSON feeds (default: config/weekly_news_feeds.json).")
+    parser.add_argument("--sources", default="all", help="Danh sách id nguồn (phẩy) hoặc all.")
+    parser.add_argument("--per-source", type=int, default=12, help="Số bài tối đa mỗi nguồn; 'max_items' trong config sẽ ghi đè.")
+    parser.add_argument("--limit", type=int, default=20)
+    parser.add_argument(
+        "--exclude-keywords",
+        default=None,
+        metavar="K1,K2,...",
+        help="Từ khóa (phẩy) để loại bài có tiêu đề/tóm tắt chứa từ đó (không phân biệt hoa thường); "
+        "gộp với 'exclude_keywords' trong config.",
+    )
+    parser.add_argument("--timeout", type=int, default=25)
+    parser.add_argument("--pause", type=float, default=0.25)
+    parser.add_argument("--days", type=int, default=None, metavar="N")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--html", metavar="PATH")
+    parser.add_argument("--summarize", "--gemini", dest="summarize", action="store_true")
+    parser.add_argument(
+        "--summary-provider",
+        dest="summary_provider",
+        choices=sorted(_SUMMARY_PROVIDERS),
+        default=os.environ.get("SUMMARY_PROVIDER", "groq"),
+        help="Nhà cung cấp LLM tóm tắt: 'groq' (GROQ_API_KEY) hoặc 'gemini' "
+        "(GEMINI_API_KEY, từ aistudio.google.com). Mặc định: groq, hoặc biến SUMMARY_PROVIDER.",
+    )
+    parser.add_argument("--summary-model", dest="summary_model", default=None, metavar="MODEL_ID",
+                        help="Model chính; mặc định theo provider được chọn.")
+    parser.add_argument(
+        "--summary-model-fallback",
+        dest="summary_model_fallback",
+        default=None,
+        metavar="MODEL_IDS",
+        help="Chuỗi model dự phòng (phân tách bằng dấu phẩy): nếu model chính lỗi hoặc hết hạn "
+        "mức ngày, thử lại từng chunk với model kế tiếp. Mặc định theo provider được chọn.",
+    )
+    parser.add_argument("--gemini-max-excerpt-chars", type=int, default=480, help="Với --gemini-no-fetch-article: giới hạn ký tự mô tả RSS gửi Gemini.")
+    parser.add_argument(
+        "--gemini-no-fetch-article",
+        action="store_true",
+        help="Không tải trang bài báo; chỉ dùng mô tả RSS cho Gemini.",
+    )
+    parser.add_argument("--gemini-article-timeout", type=int, default=30, help="Timeout HTTP (giây) khi tải HTML bài báo.")
+    parser.add_argument("--gemini-article-max-bytes", type=int, default=2_500_000, metavar="N", help="Giới hạn bytes HTML mỗi bài.")
+    parser.add_argument("--gemini-article-fetch-pause", type=float, default=0.35, help="Giây nghỉ giữa các lần tải trang (lịch sự).")
+    parser.add_argument("--gemini-max-article-chars", type=int, default=6_000, help="Tối đa ký tự plain text/bài gửi model (còn bị cắt thêm để vừa --summary-tpm).")
+    parser.add_argument("--gemini-max-output-tokens", type=int, default=None, help="Tokens output tối đa mỗi request (mặc định theo provider; lớn hơn cho Gemini để đủ chỗ cho nhiều tóm tắt).")
+    parser.add_argument("--summary-tpm", type=int, default=None, metavar="N", help="Giới hạn tokens/phút của gói (mặc định theo provider). Input mỗi request bị cắt để không vượt.")
+    parser.add_argument("--gemini-timeout", type=int, default=180)
+    parser.add_argument("--gemini-chunk-size", type=int, default=None, help="Số bài mỗi request (mặc định theo provider — 3 cho Groq 8K TPM, lớn hơn cho Gemini 250K TPM). Dùng 0 để gộp tất cả vào 1 request.")
+    parser.add_argument("--gemini-chunk-pause", type=float, default=45.0)
+    parser.add_argument("--gemini-retries", type=int, default=7)
+    parser.add_argument(
+        "--read-news-azure-voice",
+        default=READ_NEWS_AZURE_VOICE_VI_DEFAULT,
+        metavar="VOICE_ID",
+        help="Azure AI Speech: mã giọng neural cho trình đọc (vd. vi-VN-HoaiMyNeural).",
+    )
+    parser.add_argument(
+        "--read-news-azure-voice-fallback",
+        default=READ_NEWS_AZURE_VOICE_FALLBACK_VI_DEFAULT,
+        metavar="VOICE_ID",
+        help="Đọc tin: giọng Azure dự phòng nếu giọng chính lỗi.",
+    )
+    parser.add_argument(
+        "--read-news-azure-region",
+        default=None,
+        metavar="REGION",
+        help="Vùng Azure mặc định điền sẵn trong ô đọc tin (người xem có thể sửa).",
+    )
+    args = parser.parse_args()
+
+    if args.days is not None and args.days < 1:
+        print("Lỗi: --days phải >= 1.", file=sys.stderr)
+        return 2
+
+    feeds_path = args.feeds_config or default_feeds_config_path()
+    try:
+        feeds = load_feeds(feeds_path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"Lỗi đọc feeds: {feeds_path}: {exc}", file=sys.stderr)
+        return 2
+
+    sids = list(feeds.keys()) if args.sources.strip().lower() == "all" else [
+        s.strip().lower() for s in args.sources.split(",") if s.strip()
+    ]  # "all" keeps config order (feeds are loaded in config sequence)
+
+    # The first feed in play leads the digest (highlighted "Tin nổi bật" section).
+    lead_source_id = sids[0] if sids else None
+    lead_source_name = feeds[lead_source_id][0] if lead_source_id in feeds else None
+
+    exclude_keywords = load_config_exclude_keywords(feeds_path) + parse_cli_keywords(args.exclude_keywords)
+    items = gather(feeds, sids, args.per_source, args.timeout, args.pause, exclude_keywords=exclude_keywords)
+    server_days: int | None = None
+    if args.days is not None:
+        server_days = args.days
+        items, dnd, dold = filter_by_recent_days(items, args.days)
+        if dnd or dold:
+            print(
+                f"Lọc --days {args.days}: bỏ {dold} bài quá cũ, {dnd} bài không có ngày.",
+                file=sys.stderr,
+            )
+    # gather() already ordered items by config feed sequence then time; just apply the cap.
+    items = items[: args.limit]
+
+    summary_model_used: str | None = None
+    overview: str | None = None
+    if args.summarize:
+        svc = _SUMMARY_PROVIDERS[args.summary_provider]
+        provider_name = args.summary_provider
+        key = svc.api_key()
+        if not key:
+            env_var = "GEMINI_API_KEY" if provider_name == "gemini" else "GROQ_API_KEY"
+            print(f"Cần {env_var} khi dùng --summarize với provider '{provider_name}'.", file=sys.stderr)
+            return 2
+        model = args.summary_model or svc.SUMMARY_MODEL_DEFAULT
+        model_fallback = args.summary_model_fallback if args.summary_model_fallback is not None else svc.SUMMARY_MODEL_FALLBACK_DEFAULT
+        chunk_size = args.gemini_chunk_size if args.gemini_chunk_size is not None else svc.DEFAULT_CHUNK_SIZE
+        max_output_tokens = args.gemini_max_output_tokens if args.gemini_max_output_tokens is not None else svc.DEFAULT_MAX_OUTPUT_TOKENS
+        summary_tpm = args.summary_tpm if args.summary_tpm is not None else svc.DEFAULT_TPM_LIMIT
+        try:
+            if not args.gemini_no_fetch_article:
+                print(
+                    f"Tóm tắt ({provider_name}): đang tải từng trang bài và trích văn bản để tóm tắt "
+                    "(thêm --gemini-no-fetch-article nếu chỉ muốn RSS).",
+                    file=sys.stderr,
+                )
+            items, vn_fallback_used = groq_weekly_enrich(
+                items,
+                api_key=key,
+                model=model,
+                model_fallback=model_fallback,
+                full_article=not args.gemini_no_fetch_article,
+                article_fetch_timeout_s=args.gemini_article_timeout,
+                article_max_bytes=args.gemini_article_max_bytes,
+                article_fetch_pause_s=args.gemini_article_fetch_pause,
+                max_article_chars=args.gemini_max_article_chars,
+                max_excerpt_chars=args.gemini_max_excerpt_chars,
+                max_output_tokens=max_output_tokens,
+                request_timeout_s=args.gemini_timeout,
+                chunk_size=chunk_size,
+                chunk_pause_s=args.gemini_chunk_pause,
+                max_retries=args.gemini_retries,
+                summary_tpm=summary_tpm,
+                svc=svc,
+            )
+            summary_model_used = model
+            if vn_fallback_used:
+                summary_model_used = f"{model} (fallback used: {model_fallback})"
+            print(f"{provider_name} OK ({summary_model_used}, {len(items)} bài).", file=sys.stderr)
+            try:
+                overview = generate_overall_briefing(
+                    items, svc=svc, api_key=key, model=model, model_fallback=model_fallback,
+                    request_timeout_s=args.gemini_timeout, summary_tpm=summary_tpm,
+                )
+                print(f"Bản tổng hợp: {'OK' if overview else 'không tạo được'}.", file=sys.stderr)
+            except Exception as exc:  # noqa: BLE001
+                print(f"Bản tổng hợp lỗi: {exc}", file=sys.stderr)
+        except Exception as exc:  # noqa: BLE001
+            print(f"{provider_name} lỗi, giữ tóm tắt RSS: {exc}", file=sys.stderr)
+
+    if args.html:
+        out = Path(args.html)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(
+            build_html(
+                items,
+                server_days=server_days,
+                summary_model=summary_model_used,
+                summary_provider=_SUMMARY_PROVIDERS[args.summary_provider].DISPLAY_NAME,
+                summary_overview=overview,
+                summary_article_pages=bool(summary_model_used) and not args.gemini_no_fetch_article,
+                lead_source_id=lead_source_id,
+                lead_source_name=lead_source_name,
+                read_news_azure_voice=args.read_news_azure_voice,
+                read_news_azure_voice_fallback=args.read_news_azure_voice_fallback,
+                read_news_azure_region=args.read_news_azure_region,
+            ),
+            encoding="utf-8",
+        )
+        print(f"Đã ghi {out.resolve()} ({len(items)} bài).", file=sys.stderr)
+
+    if args.json:
+        print(json.dumps([asdict(x) for x in items], ensure_ascii=False, indent=2))
+    elif not args.html:
+        print(format_console(items))
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
