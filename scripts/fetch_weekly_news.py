@@ -610,7 +610,7 @@ def groq_weekly_enrich(
     cats_literal = " | ".join(VIETNAM_CATEGORY_LABELS)
     if full_article:
         instructions = (
-            "Bạn là biên tập viên tin tức Việt Nam. Mỗi mục có metadata và `article_plain_text`: "
+            "Bạn là biên tập viên tin tức về khoa học, giáo dục, sức khỏe và đời sống. Mỗi mục có metadata và `article_plain_text`: "
             "văn bản thu được từ trang bài báo (đã loại bớt menu/quảng cáo; có thể không đầy đủ). "
             "Dựa vào đó và tiêu đề để viết summary và chọn category; không bịa sự kiện, con số hay trích dẫn "
             "không có trong nội dung. Nếu văn bản quá mỏng hoặc không rõ, nêu điều đã được hỗ trợ và giữ thận trọng.\n\n"
@@ -624,7 +624,7 @@ def groq_weekly_enrich(
         )
     else:
         instructions = (
-            "Bạn là biên tập viên tin tức Việt Nam. Bạn chỉ nhận tiêu đề, nguồn và đoạn mô tả RSS — không có toàn văn bài báo. "
+            "Bạn là biên tập viên tin tức về khoa học, giáo dục, sức khỏe và đời sống. Bạn chỉ nhận tiêu đề, nguồn và đoạn mô tả RSS — không có toàn văn bài báo. "
             "Không bịa sự kiện, con số hay trích dẫn không có trong dữ liệu.\n\n"
             "Trả về DUY NHẤT một mảng JSON (không dùng markdown). Mỗi phần tử là object với các khóa đúng: "
             '"index" (số nguyên khớp input), "link" (chuỗi giống input), '
@@ -836,7 +836,7 @@ def generate_overall_briefing(
     out_tokens = 6000  # enough for a full multi-paragraph briefing plus the model's thinking overhead
     cap_chars = max(2000, int((summary_tpm * 0.8 - out_tokens - 400) * 2))  # keep the request under TPM
     prompt = (
-        "Bạn là biên tập viên thời sự. Dưới đây là danh sách TẤT CẢ tin trong ngày (số thứ tự, [chủ đề], "
+        "Bạn là biên tập viên tin tức về khoa học, giáo dục, sức khỏe và đời sống. Dưới đây là danh sách TẤT CẢ tin trong tuần (số thứ tự, [chủ đề], "
         "tiêu đề: tóm tắt). Hãy viết BẢN TỔNG HỢP bằng tiếng Việt, BAO QUÁT tất cả diễn biến chính, nhóm theo "
         "chủ đề, mỗi chủ đề một đoạn ngắn; không bỏ sót tin quan trọng và không lặp lại tin trùng. Văn phong "
         "trung lập. Chỉ trả về văn bản thuần (các đoạn cách nhau bằng dòng trống), không markdown, không tiêu đề.\n\n"
