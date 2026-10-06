@@ -9,14 +9,15 @@
 # Pages. Because ./site already holds the Security and Vietnam pages, nothing needs
 # to restore them.
 #
-# Schedule: Mondays 21:00 UTC ≈ 04:00 Tuesday in Vietnam (ICT, UTC+7). Runs weekly;
-# --days 7 covers the whole week. Trigger any time via "Run workflow" (workflow_dispatch).
+# Schedule: 17:00 UTC on Tuesdays and Fridays ≈ 00:00 ICT the next calendar day
+# (UTC+7). --days 7 covers a week of feeds. Trigger any time via "Run workflow"
+# (workflow_dispatch).
 
 name: Weekly news digest
 
 on:
   schedule:
-    - cron: "0 17 * * 5"
+    - cron: "0 17 * * 2,5"
   workflow_dispatch:
 
 concurrency:
@@ -84,8 +85,8 @@ jobs:
           fi
           mkdir -p site/weekly
           python scripts/fetch_weekly_news.py \
-            --days 7 \
-            --per-source 30 \
+            --days 4 \
+            --per-source 50 \
             --limit 500 \
             --pause 0.3 \
             --html site/weekly/index.html \

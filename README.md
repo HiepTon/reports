@@ -186,11 +186,11 @@ GROQ_API_KEY=... python scripts/fetch_weekly_news.py --summarize --days 7 --html
 
 All summary flags match `fetch_vietnam_news.py` (`--summarize`, `--summary-provider`, `--summary-model`, `--gemini-chunk-size`, etc.). Without **`--summarize`** it keeps RSS blurbs and category **`Chưa phân loại`**.
 
-### GitHub Actions (weekly, Mondays)
+### GitHub Actions (Tuesdays and Fridays)
 
 Workflow: [`.github/workflows/weekly-news-digest.yml`](.github/workflows/weekly-news-digest.yml).
 
-- **Cron:** `0 21 * * 1` **UTC** → ~**04:00 Tuesday** in **Vietnam** (ICT, **UTC+7**). Runs weekly; `--days 7` covers the whole week. Trigger any time with **Run workflow** (workflow_dispatch), or the in-page **Rebuild** control → **Weekly digest**.
+- **Cron:** `0 17 * * 2,5` **UTC** → **17:00 Tuesday and Friday** UTC (~**00:00 ICT** Wednesday and Saturday). `--days 7` covers a week of feeds. Trigger any time with **Run workflow** (workflow_dispatch), or the in-page **Rebuild** control → **Weekly digest**.
 - **GitHub Pages:** builds **only** the Weekly HTML (`weekly/index.html`) into the `gh-pages` working copy (which already holds the security and Vietnam pages), saves a dated snapshot under `archive/weekly/`, then **deploys** the whole site to Pages. Open **`/weekly/`** for the digest.
 - **Artifact:** each run uploads **`weekly-news`** (zip with the Weekly `index.html`) for offline download.
 
