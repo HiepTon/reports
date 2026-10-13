@@ -1,0 +1,1850 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Tin Việt Nam — tổng hợp</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --card: #1a2332;
+      --text: #e7ecf3;
+      --muted: #9fb0c8;
+      --accent: #5bd59b;
+      --border: #2a3a52;
+      --badge: #3d6b55;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.55;
+    }
+    .wrap { max-width: 52rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.35rem; font-weight: 650; margin: 0 0 0.25rem; }
+    .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 0.75rem; }
+    .submeta { display: inline-block; margin-top: 0.35rem; font-size: 0.82rem; color: #8fa6bf; line-height: 1.45; }
+    .toolbar {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem;
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 0.75rem 1rem; margin-bottom: 1.25rem; font-size: 0.92rem;
+    }
+    .toolbar label { color: var(--muted); display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+    .toolbar input[type="number"] {
+      width: 4.5rem; padding: 0.35rem 0.45rem; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--bg); color: var(--text); font-size: 0.95rem;
+    }
+    .toolbar button {
+      cursor: pointer; border: none; border-radius: 6px; padding: 0.4rem 0.85rem;
+      font-size: 0.88rem; font-weight: 600;
+    }
+    .toolbar .apply { background: var(--accent); color: #0a111a; }
+    .toolbar .reset { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .filter-hint { width: 100%; font-size: 0.8rem; color: var(--muted); margin: 0.25rem 0 0; }
+    .card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 1rem 1.15rem 1.1rem; margin-bottom: 1rem;
+    }
+    .card-head { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: baseline;
+      font-size: 0.82rem; color: var(--muted); margin-bottom: 0.35rem; }
+    .badge { background: var(--badge); color: #dfffea; padding: 0.15rem 0.5rem; border-radius: 6px;
+      font-weight: 650; font-size: 0.78rem; }
+    .badge-nosum { background: transparent; color: #d8a24a; border: 1px solid #6b562f; font-weight: 600; }
+    .src { font-weight: 600; color: var(--accent); margin-left: auto; }
+    .topic { font-size: 1.08rem; margin: 0.35rem 0 0.75rem; line-height: 1.35; }
+    .topic a { color: var(--text); text-decoration: none; }
+    .topic a:hover { text-decoration: underline; color: var(--accent); }
+    .block h3 { margin: 0 0 0.35rem; font-size: 0.72rem; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--muted); font-weight: 650; }
+    .block p { margin: 0; font-size: 0.95rem; color: #d5dde8; }
+    .linkrow { margin: 0.85rem 0 0; word-break: break-all; font-size: 0.85rem; }
+    a.full { color: var(--accent); }
+    .digest-section { font-size: 1.02rem; font-weight: 650; margin: 1.35rem 0 0.65rem; color: var(--accent); letter-spacing: 0.02em; }
+    .digest-section:first-of-type { margin-top: 0.2rem; }
+    .digest-section-muted { color: #8fa6bf; font-size: 0.98rem; }
+    .card.card-top { border-color: #3d5c4a; box-shadow: 0 0 0 1px rgba(91, 213, 155, 0.12); }
+
+    .reader-tools { display: flex; flex-direction: column; gap: 0.55rem; width: 100%; margin-top: 0.65rem; padding-top: 0.65rem; border-top: 1px solid var(--border); }
+    .reader-key-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem 0.65rem; width: 100%; font-size: 0.88rem; }
+    .reader-key-row label { color: var(--muted); font-weight: 600; }
+    .reader-api-input {
+      flex: 1 1 12rem; min-width: 9rem; max-width: 100%; padding: 0.4rem 0.55rem; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.88rem;
+    }
+    .reader-region-input { flex: 0 1 8rem; min-width: 6rem; }
+    .reader-save-key { flex: 0 0 auto; }
+    .reader-key-hint { flex: 1 1 10rem; font-size: 0.78rem; color: var(--muted); }
+    .reader-actions-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; }
+    .reader-speed-wrap {
+      display: inline-flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;
+      padding: 0.15rem 0.35rem; border-radius: 6px; border: 1px solid var(--border); background: rgba(0,0,0,0.12);
+    }
+    .reader-speed-wrap .reader-speed-heading { color: var(--muted); font-size: 0.78rem; font-weight: 600; margin: 0; }
+    .reader-speed-btn {
+      cursor: pointer; min-width: 2rem; padding: 0.3rem 0.45rem; border-radius: 5px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.95rem; font-weight: 700; line-height: 1;
+    }
+    .reader-speed-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .reader-speed-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    #readerSpeedValue {
+      min-width: 3rem; text-align: center; font-size: 0.82rem; font-variant-numeric: tabular-nums;
+      font-weight: 650; color: var(--text);
+    }
+    .reader-tools .read { background: var(--accent); color: #0a111a; }
+    .reader-tools .stop { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .reader-tools .read:disabled, .reader-tools .stop:disabled { opacity: 0.45; cursor: not-allowed; }
+    #readStatus { flex: 1 1 12rem; font-size: 0.8rem; color: var(--muted); margin: 0; min-height: 1.2em; }
+    #readStatus.err { color: #f0a4a4; }
+    .reader-card-btn {
+      display: inline-block; margin-left: 0.5rem; padding: 0.1rem 0.45rem; vertical-align: middle;
+      font-size: 0.72rem; font-weight: 600; cursor: pointer; border-radius: 5px;
+      border: 1px solid var(--border); background: transparent; color: var(--muted); white-space: nowrap;
+    }
+    .reader-card-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .tabs { display: flex; gap: 0.4rem; margin: 0.9rem 0 0.2rem; border-bottom: 1px solid var(--border); }
+    .tab-btn {
+      cursor: pointer; padding: 0.45rem 0.9rem; font-size: 0.92rem; font-weight: 650;
+      background: transparent; color: var(--muted); border: 1px solid transparent; border-bottom: none;
+      border-radius: 8px 8px 0 0; margin-bottom: -1px;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-color: var(--border); border-bottom: 1px solid var(--bg); background: var(--card, rgba(255,255,255,0.02)); }
+    .tab-pane[hidden] { display: none; }
+    .summary-wrap { margin-top: 0.9rem; }
+    #summaryText { font-size: 1rem; line-height: 1.65; color: #d5dde8; }
+    #summaryText p { margin: 0 0 0.9rem; }
+    .summary-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; margin: 0.4rem 0 1rem; }
+    #summaryStatus { flex: 1 1 12rem; font-size: 0.8rem; color: var(--muted); margin: 0; min-height: 1.2em; }
+    #summaryStatus.err { color: #f0a4a4; }
+    .summary-empty { color: var(--muted); }
+
+
+    .rebuild-select { flex: 0 1 12rem; min-width: 8rem; cursor: pointer; }
+    #rebuildStatus { flex: 1 1 12rem; font-size: 0.8rem; color: var(--muted); margin: 0; min-height: 1.2em; }
+    #rebuildStatus.err { color: #f0a4a4; }
+
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Tin Việt Nam — tổng hợp RSS</h1>
+    <p class="meta">Cập nhật 2026-10-13 02:29 UTC · <span id="visibleCount">89</span> bài · <a class="full" href="../archive/">🕘 Lịch sử</a><br/>
+    <span class="submeta">Tóm tắt và nhóm chủ đề: Gemini (gemini-3.1-flash-lite), theo văn bản trích từ trang bài báo (không chỉ RSS). Tin Tuổi Trẻ (tuoitre.vn) hiển thị trước trong mục tin nổi bật.</span></p>
+    <div class="tabs" role="tablist">
+      <button type="button" class="tab-btn active" data-tab="pane-news">Tin tức</button>
+      <button type="button" class="tab-btn" data-tab="pane-summary">Tổng hợp</button>
+    </div>
+    <div id="pane-news" class="tab-pane">
+    <div class="toolbar">
+      <label>Hiện bài trong
+        <input type="number" id="dayWindow" min="1" max="3650" value="1"/>
+        ngày gần nhất
+      </label>
+      <button type="button" class="apply" id="applyDays">Áp dụng</button>
+      <button type="button" class="reset" id="resetDays">Hiện tất cả</button>
+      <p class="filter-hint">Lọc theo ngày (server): 1 ngày gần nhất (UTC), chỉ bài có ngày parse được. Bài không có data-ts sẽ bị ẩn khi lọc. Nút Đọc tin: Azure AI Speech đọc các bản tóm tắt trên trang (giọng vi-VN-HoaiMyNeural / dự phòng vi-VN-NamMinhNeural); nhập khóa Azure + vùng ở ô phía trên.</p>
+<div class="reader-tools">
+      <div class="reader-key-row">
+        <label for="readerAzureKeyInput">Khóa Azure Speech</label>
+        <input type="password" id="readerAzureKeyInput" class="reader-api-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Khóa tài nguyên Speech"/>
+        <label for="readerAzureRegionInput">Vùng</label>
+        <input type="text" id="readerAzureRegionInput" class="reader-api-input reader-region-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="vd: southeastasia"/>
+        <button type="button" class="reset reader-save-key" id="saveReaderApiKey">Lưu</button>
+        <span id="readerKeySavedHint" class="reader-key-hint" aria-live="polite"></span>
+      </div>
+      <div class="reader-actions-row">
+        <button type="button" class="apply read" id="readNews">Đọc tin</button>
+        <button type="button" class="reset stop" id="stopRead" disabled>Dừng đọc</button>
+        <div class="reader-speed-wrap" role="group" aria-label="Tốc độ đọc">
+          <span class="reader-speed-heading">Tốc độ</span>
+          <button type="button" class="reader-speed-btn" id="readerSpeedDown" title="Chậm hơn" aria-label="Chậm hơn">−</button>
+          <span id="readerSpeedValue">1.0×</span>
+          <button type="button" class="reader-speed-btn" id="readerSpeedUp" title="Nhanh hơn" aria-label="Nhanh hơn">+</button>
+        </div>
+        <p id="readStatus"></p>
+      </div>
+    </div>
+<div class="reader-tools rebuild-tools">
+      <div class="reader-key-row">
+        <label for="rebuildTokenInput">GitHub token</label>
+        <input type="password" id="rebuildTokenInput" class="reader-api-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Token có quyền Actions ghi"/>
+        <button type="button" class="reset reader-save-key" id="saveRebuildToken">Lưu</button>
+        <span id="rebuildTokenHint" class="reader-key-hint" aria-live="polite"></span>
+      </div>
+      <div class="reader-actions-row">
+        <label for="rebuildWorkflow">Bản tin</label>
+        <select id="rebuildWorkflow" class="reader-api-input rebuild-select"><option value="vietnam-news-daily.yml" selected>Tin Việt Nam</option><option value="security-news-daily.yml">Tin an ninh mạng</option><option value="weekly-news-digest.yml">Tin hàng tuần</option></select>
+        <button type="button" class="apply read" id="rebuildRun">Tạo lại</button>
+        <p id="rebuildStatus"></p>
+      </div>
+    </div>
+    </div>
+<h2 class="digest-section">Tin nổi bật — Tuổi Trẻ Online</h2>
+<article class="card card-top" data-category="sức-khỏe" data-ts="1791852720000">
+  <header class="card-head">
+    <span class="badge">Sức khỏe</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-13T00:52:00+00:00">2026-10-13T00:52:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/vi-sao-tuoi-tho-dan-ong-a-dong-kem-xa-phu-nu-100261012221103384.htm" rel="noopener noreferrer">Vì sao tuổi thọ đàn ông Á Đông kém xa phụ nữ?</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Các nghiên cứu tại khu vực Á Đông cho thấy nam giới thường có tuổi thọ thấp hơn phụ nữ từ 5-6 năm, một khoảng cách lớn hơn so với nhiều nước châu Âu. Các chuyên gia nhận định việc nam giới chia sẻ công việc nhà không chỉ giúp tăng cường vận động thể chất mà còn cải thiện sức khỏe tinh thần, từ đó góp phần nâng cao tuổi thọ.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/vi-sao-tuoi-tho-dan-ong-a-dong-kem-xa-phu-nu-100261012221103384.htm" rel="noopener noreferrer">https://tuoitre.vn/vi-sao-tuoi-tho-dan-ong-a-dong-kem-xa-phu-nu-100261012221103384.htm</a></p>
+</article>
+<article class="card card-top" data-category="pháp-luật" data-ts="1791852660000">
+  <header class="card-head">
+    <span class="badge">Pháp luật</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-13T00:51:00+00:00">2026-10-13T00:51:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/duong-di-52-trieu-usd-cua-trum-nguoi-trung-quoc-co-2-cuu-nhan-vien-ngan-hang-tiep-tay-100261013012150159.htm" rel="noopener noreferrer">Đường đi 52 triệu USD của &#x27;trùm&#x27; người Trung Quốc có 2 cựu nhân viên ngân hàng tiếp tay</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Viện Kiểm sát nhân dân TP Hà Nội đã ban hành cáo trạng về đường dây chuyển trái phép hơn 52 triệu USD (tương đương gần 1.200 tỉ đồng) qua biên giới dưới vỏ bọc hợp đồng thương mại khống. Vụ việc có sự tham gia của một đối tượng người Trung Quốc và sự tiếp tay của hai cựu nhân viên ngân hàng trong việc hợp thức hóa hồ sơ, chứng từ.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/duong-di-52-trieu-usd-cua-trum-nguoi-trung-quoc-co-2-cuu-nhan-vien-ngan-hang-tiep-tay-100261013012150159.htm" rel="noopener noreferrer">https://tuoitre.vn/duong-di-52-trieu-usd-cua-trum-nguoi-trung-quoc-co-2-cuu-nhan-vien-ngan-hang-tiep-tay-100261013012150159.htm</a></p>
+</article>
+<article class="card card-top" data-category="công-nghệ" data-ts="1791852180000">
+  <header class="card-head">
+    <span class="badge">Công nghệ</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-13T00:43:00+00:00">2026-10-13T00:43:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/xe-may-dien-an-nang-thay-com-di-lam-moi-ngay-co-the-khong-can-cam-sac-100261012145508696.htm" rel="noopener noreferrer">Xe máy điện &#x27;ăn nắng thay cơm&#x27;, đi làm mỗi ngày có thể không cần cắm sạc</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Mẫu xe máy điện Lightfoot vừa ra mắt tại Mỹ gây chú ý với thiết kế tích hợp hai tấm pin mặt trời ở thân xe, giúp bổ sung năng lượng cho các chuyến đi ngắn trong đô thị. Dù có tốc độ tối đa dưới 32km/h và giá bán khá cao, mẫu xe này hướng đến người dùng cần phương tiện di chuyển hằng ngày mà không phụ thuộc hoàn toàn vào việc cắm sạc.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/xe-may-dien-an-nang-thay-com-di-lam-moi-ngay-co-the-khong-can-cam-sac-100261012145508696.htm" rel="noopener noreferrer">https://tuoitre.vn/xe-may-dien-an-nang-thay-com-di-lam-moi-ngay-co-the-khong-can-cam-sac-100261012145508696.htm</a></p>
+</article>
+<article class="card card-top" data-category="thế-giới" data-ts="1791851520000">
+  <header class="card-head">
+    <span class="badge">Thế giới</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-13T00:32:00+00:00">2026-10-13T00:32:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/hacker-tan-cong-hang-tram-sieu-thi-phap-chi-de-tang-nhiet-do-tu-lanh-100261013072957314.htm" rel="noopener noreferrer">Hacker tấn công hàng trăm siêu thị Pháp chỉ để... tăng nhiệt độ tủ lạnh</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Hàng trăm siêu thị tại Pháp đã trở thành mục tiêu của một cuộc tấn công mạng quy mô lớn, khiến nhiệt độ tủ lạnh và tủ đông bị đẩy lên 50 độ C, gây hư hỏng thực phẩm và thiệt hại hàng chục triệu euro. Cơ quan chức năng Pháp đang phối hợp điều tra, xác định lỗ hổng nằm trong phần mềm điều khiển của hãng Danfoss.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/hacker-tan-cong-hang-tram-sieu-thi-phap-chi-de-tang-nhiet-do-tu-lanh-100261013072957314.htm" rel="noopener noreferrer">https://tuoitre.vn/hacker-tan-cong-hang-tram-sieu-thi-phap-chi-de-tang-nhiet-do-tu-lanh-100261013072957314.htm</a></p>
+</article>
+<article class="card card-top" data-category="kinh-tế" data-ts="1791851160000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-13T00:26:00+00:00">2026-10-13T00:26:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/cang-hang-khong-quang-tri-huong-toi-khai-thac-tu-nam-2027-100261012231919648.htm" rel="noopener noreferrer">Cảng hàng không Quảng Trị hướng tới khai thác từ năm 2027</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Dự án Cảng hàng không Quảng Trị do liên danh T&amp;T Group - CIENCO4 đầu tư đã hoàn thành hơn 80% khối lượng công việc và đang hướng tới mục tiêu khai thác thương mại từ tháng 3-2027. Sân bay được kỳ vọng sẽ trở thành động lực phát triển kinh tế, du lịch và kết nối giao thông quan trọng cho địa phương.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/cang-hang-khong-quang-tri-huong-toi-khai-thac-tu-nam-2027-100261012231919648.htm" rel="noopener noreferrer">https://tuoitre.vn/cang-hang-khong-quang-tri-huong-toi-khai-thac-tu-nam-2027-100261012231919648.htm</a></p>
+</article>
+<article class="card card-top" data-category="kinh-tế" data-ts="1791849600000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-13T00:00:00+00:00">2026-10-13T00:00:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/kinh-te-tu-nhan-tu-nguon-thu-ngan-sach-den-kien-tao-ha-tang-100261012213608358.htm" rel="noopener noreferrer">Kinh tế tư nhân: Từ nguồn thu ngân sách đến kiến tạo hạ tầng</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Bài báo đề cập ngắn gọn về việc Vingroup hợp tác với Alstom để cung cấp 200 đoàn tàu metro cho Hà Nội, đồng thời chuyển giao công nghệ sản xuất tại Việt Nam.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/kinh-te-tu-nhan-tu-nguon-thu-ngan-sach-den-kien-tao-ha-tang-100261012213608358.htm" rel="noopener noreferrer">https://tuoitre.vn/kinh-te-tu-nhan-tu-nguon-thu-ngan-sach-den-kien-tao-ha-tang-100261012213608358.htm</a></p>
+</article>
+<article class="card card-top" data-category="thể-thao" data-ts="1791849600000">
+  <header class="card-head">
+    <span class="badge">Thể thao</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-13T00:00:00+00:00">2026-10-13T00:00:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/tam-diem-champions-league-man-city-dai-chien-psg-man-united-gap-kho-100261012164302615.htm" rel="noopener noreferrer">Tâm điểm Champions League: Man City đại chiến PSG, Man United gặp khó?</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Lượt trận thứ hai vòng phân hạng Champions League 2026-2027 chứng kiến những cặp đấu hấp dẫn, trong đó tâm điểm là màn so tài giữa Man City và PSG. Trong khi đó, Man United được dự báo sẽ gặp nhiều khó khăn khi phải làm khách trên sân của Atletico Madrid.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/tam-diem-champions-league-man-city-dai-chien-psg-man-united-gap-kho-100261012164302615.htm" rel="noopener noreferrer">https://tuoitre.vn/tam-diem-champions-league-man-city-dai-chien-psg-man-united-gap-kho-100261012164302615.htm</a></p>
+</article>
+<article class="card card-top" data-category="thế-giới" data-ts="1791849240000">
+  <header class="card-head">
+    <span class="badge">Thế giới</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-12T23:54:00+00:00">2026-10-12T23:54:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/tin-tuc-the-gioi-13-10-my-giai-thich-2-cach-ve-viec-mua-dau-nga-anh-cao-buoc-iran-am-muu-khung-bo-100261013064330856.htm" rel="noopener noreferrer">Tin tức thế giới 13-10: Mỹ giải thích 2 cách về việc mua dầu Nga; Anh cáo buộc Iran âm mưu khủng bố</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Tổng thống Mỹ Donald Trump bảo vệ thỏa thuận mua dầu từ Nga, trong khi giới chức Mỹ cho rằng đây là bước đi nhằm kéo Nga vào bàn đàm phán. Cùng lúc đó, Triều Tiên tiếp tục phóng thử tên lửa đạn đạo, còn Anh cáo buộc Iran đứng sau âm mưu tấn công căn cứ quân sự trên lãnh thổ nước này.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/tin-tuc-the-gioi-13-10-my-giai-thich-2-cach-ve-viec-mua-dau-nga-anh-cao-buoc-iran-am-muu-khung-bo-100261013064330856.htm" rel="noopener noreferrer">https://tuoitre.vn/tin-tuc-the-gioi-13-10-my-giai-thich-2-cach-ve-viec-mua-dau-nga-anh-cao-buoc-iran-am-muu-khung-bo-100261013064330856.htm</a></p>
+</article>
+<article class="card card-top" data-category="văn-hóa-giải-trí" data-ts="1791848880000">
+  <header class="card-head">
+    <span class="badge">Văn hóa – Giải trí</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-12T23:48:00+00:00">2026-10-12T23:48:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/suc-hut-20-trieu-usd-cua-dich-le-nhiet-ba-tu-tuan-le-thoi-trang-paris-100261012223619125.htm" rel="noopener noreferrer">Sức hút 20 triệu USD của Địch Lệ Nhiệt Ba từ Tuần lễ thời trang Paris</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Tại Tuần lễ thời trang Paris, diễn viên Địch Lệ Nhiệt Ba đạt giá trị truyền thông tự nhiên (EMV) lên tới 20 triệu USD, dẫn đầu trong số các nghệ sĩ Hoa ngữ. Con số này được đánh giá dựa trên mức độ phủ sóng và tương tác trên mạng xã hội, khẳng định sức ảnh hưởng của cô với tư cách đại sứ toàn cầu của Dior.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/suc-hut-20-trieu-usd-cua-dich-le-nhiet-ba-tu-tuan-le-thoi-trang-paris-100261012223619125.htm" rel="noopener noreferrer">https://tuoitre.vn/suc-hut-20-trieu-usd-cua-dich-le-nhiet-ba-tu-tuan-le-thoi-trang-paris-100261012223619125.htm</a></p>
+</article>
+<article class="card card-top" data-category="văn-hóa-giải-trí" data-ts="1791848760000">
+  <header class="card-head">
+    <span class="badge">Văn hóa – Giải trí</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-12T23:46:00+00:00">2026-10-12T23:46:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/dragon-ball-super-beerus-vua-ra-mat-da-gay-sot-100261013001914802.htm" rel="noopener noreferrer">Dragon Ball Super: Beerus vừa ra mắt đã gây sốt</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Phiên bản làm lại của anime Dragon Ball Super với tựa đề &#x27;Dragon Ball Super: Beerus&#x27; vừa ra mắt đã thu hút sự chú ý lớn từ cộng đồng người hâm mộ, thậm chí gây gián đoạn truy cập trên nền tảng Crunchyroll. Tác phẩm được cải tiến về hình ảnh, âm thanh và biên tập lại nội dung để mang đến trải nghiệm mới mẻ hơn so với bản gốc năm 2015.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/dragon-ball-super-beerus-vua-ra-mat-da-gay-sot-100261013001914802.htm" rel="noopener noreferrer">https://tuoitre.vn/dragon-ball-super-beerus-vua-ra-mat-da-gay-sot-100261013001914802.htm</a></p>
+</article>
+<article class="card card-top" data-category="giáo-dục" data-ts="1791848700000">
+  <header class="card-head">
+    <span class="badge">Giáo dục</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-12T23:45:00+00:00">2026-10-12T23:45:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/sinh-vien-kien-truc-dua-di-san-len-nen-tang-so-100261013062912316.htm" rel="noopener noreferrer">Sinh viên kiến trúc đưa di sản lên nền tảng số</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Sự kiện MPOINT 2026 tại Trường đại học Kiến trúc TP.HCM giới thiệu nhiều dự án sáng tạo của sinh viên, nổi bật là ứng dụng &#x27;IDisản&#x27; giúp số hóa và hỗ trợ trải nghiệm tham quan tại Bảo tàng Lịch sử TP.HCM. Chương trình nhằm kết nối giáo dục thiết kế với thực tiễn, tạo không gian giao lưu giữa sinh viên, công nghệ và doanh nghiệp.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/sinh-vien-kien-truc-dua-di-san-len-nen-tang-so-100261013062912316.htm" rel="noopener noreferrer">https://tuoitre.vn/sinh-vien-kien-truc-dua-di-san-len-nen-tang-so-100261013062912316.htm</a></p>
+</article>
+<article class="card card-top" data-category="văn-hóa-giải-trí" data-ts="1791848580000">
+  <header class="card-head">
+    <span class="badge">Văn hóa – Giải trí</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-12T23:43:00+00:00">2026-10-12T23:43:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/hoang-vo-va-niem-vui-xuan-thi-100261012221805656.htm" rel="noopener noreferrer">Hoàng Võ và niềm vui &#x27;Xuân thì&#x27;</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Triển lãm cá nhân &#x27;Xuân thì 2026&#x27; của họa sĩ Hoàng Võ đang diễn ra tại TP.HCM, trưng bày hơn 70 tác phẩm với nhiều chất liệu đa dạng như sơn dầu, sáp dầu và màu nước. Triển lãm không chỉ thể hiện kỹ thuật vững vàng mà còn cho thấy niềm đam mê thử nghiệm không ngừng nghỉ của tác giả trong việc khắc họa vẻ đẹp thiếu nữ và phong cảnh.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/hoang-vo-va-niem-vui-xuan-thi-100261012221805656.htm" rel="noopener noreferrer">https://tuoitre.vn/hoang-vo-va-niem-vui-xuan-thi-100261012221805656.htm</a></p>
+</article>
+<article class="card card-top" data-category="văn-hóa-giải-trí" data-ts="1791848460000">
+  <header class="card-head">
+    <span class="badge">Văn hóa – Giải trí</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-12T23:41:00+00:00">2026-10-12T23:41:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/sau-3-nam-o-phap-phan-huy-dua-canh-dong-tuoi-tho-len-san-dien-viet-100261012134028558.htm" rel="noopener noreferrer">Sau 3 năm ở Pháp, Phan Huy đưa cánh đồng tuổi thơ lên sàn diễn Việt</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Nhà thiết kế Phan Huy vừa tổ chức show thời trang Xuân Hè 2027 tại TP.HCM, đánh dấu sự trở lại Việt Nam sau 3 năm hoạt động tại Pháp. Bộ sưu tập lấy cảm hứng từ ký ức tuổi thơ và cảnh sắc làng quê Việt Nam, kết hợp với các kỹ thuật thủ công tinh xảo trên trang phục.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/sau-3-nam-o-phap-phan-huy-dua-canh-dong-tuoi-tho-len-san-dien-viet-100261012134028558.htm" rel="noopener noreferrer">https://tuoitre.vn/sau-3-nam-o-phap-phan-huy-dua-canh-dong-tuoi-tho-len-san-dien-viet-100261012134028558.htm</a></p>
+</article>
+<article class="card card-top" data-category="kinh-tế" data-ts="1791848160000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-12T23:36:00+00:00">2026-10-12T23:36:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/doanh-nghiep-thuong-hieu-vang-tphcm-can-tro-thanh-canh-chim-dau-dan-nang-tam-thuong-hieu-viet-10026101300390146.htm" rel="noopener noreferrer">Doanh nghiệp &#x27;Thương hiệu Vàng TP.HCM&#x27; cần trở thành &#x27;cánh chim đầu đàn&#x27;, nâng tầm thương hiệu Việt</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Bà Nguyễn Thị Kim Ngọc, Phó giám đốc Sở Công Thương TP.HCM, nhấn mạnh các doanh nghiệp đạt giải &#x27;Thương hiệu Vàng TP.HCM&#x27; cần đóng vai trò dẫn dắt, nâng cao năng lực cạnh tranh và liên kết chuỗi cung ứng. Giải thưởng năm 2026 hướng tới việc tôn vinh các doanh nghiệp không chỉ mạnh về sản xuất mà còn chú trọng đổi mới sáng tạo và phát triển bền vững.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/doanh-nghiep-thuong-hieu-vang-tphcm-can-tro-thanh-canh-chim-dau-dan-nang-tam-thuong-hieu-viet-10026101300390146.htm" rel="noopener noreferrer">https://tuoitre.vn/doanh-nghiep-thuong-hieu-vang-tphcm-can-tro-thanh-canh-chim-dau-dan-nang-tam-thuong-hieu-viet-10026101300390146.htm</a></p>
+</article>
+<article class="card card-top" data-category="thể-thao" data-ts="1791847500000">
+  <header class="card-head">
+    <span class="badge">Thể thao</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-12T23:25:00+00:00">2026-10-12T23:25:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/chu-tich-fifa-infantino-vuong-be-boi-moi-kha-nang-khong-the-tai-cu-100261013060649331.htm" rel="noopener noreferrer">Chủ tịch FIFA Infantino vướng bê bối mới, khả năng không thể tái cử</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Chủ tịch FIFA Gianni Infantino đang đối mặt với cáo buộc nhận hàng triệu euro không công khai, nằm ngoài các khoản thu nhập chính thức. Vụ bê bối tài chính này được cho là gây ảnh hưởng nghiêm trọng đến uy tín cá nhân và khả năng tái cử của ông trong cuộc bầu cử FIFA vào tháng 3-2027.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/chu-tich-fifa-infantino-vuong-be-boi-moi-kha-nang-khong-the-tai-cu-100261013060649331.htm" rel="noopener noreferrer">https://tuoitre.vn/chu-tich-fifa-infantino-vuong-be-boi-moi-kha-nang-khong-the-tai-cu-100261013060649331.htm</a></p>
+</article>
+<article class="card card-top" data-category="kinh-tế" data-ts="1791847320000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-12T23:22:00+00:00">2026-10-12T23:22:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/thanh-cong-cua-doanh-nghiep-la-thanh-cong-cua-thanh-pho-thuong-hieu-doanh-nghiep-lam-nen-thuong-hieu-thanh-pho-100261012223429876.htm" rel="noopener noreferrer">&#x27;Thành công của doanh nghiệp là thành công của thành phố, thương hiệu doanh nghiệp làm nên thương hiệu thành phố&#x27;</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Chủ tịch UBND TP.HCM Nguyễn Văn Được gửi lời chúc mừng cộng đồng doanh nghiệp nhân ngày 13-10, khẳng định thương hiệu doanh nghiệp đóng góp trực tiếp vào vị thế của thành phố. Nhân dịp này, TP.HCM tổ chức trao giải &#x27;Thương hiệu Vàng TP.HCM&#x27; lần thứ 6 cho 50 doanh nghiệp tiêu biểu và trao giải cuộc thi viết &#x27;Thương hiệu tôi yêu&#x27;.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/thanh-cong-cua-doanh-nghiep-la-thanh-cong-cua-thanh-pho-thuong-hieu-doanh-nghiep-lam-nen-thuong-hieu-thanh-pho-100261012223429876.htm" rel="noopener noreferrer">https://tuoitre.vn/thanh-cong-cua-doanh-nghiep-la-thanh-cong-cua-thanh-pho-thuong-hieu-doanh-nghiep-lam-nen-thuong-hieu-thanh-pho-100261012223429876.htm</a></p>
+</article>
+<article class="card card-top" data-category="thể-thao" data-ts="1791847080000">
+  <header class="card-head">
+    <span class="badge">Thể thao</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-12T23:18:00+00:00">2026-10-12T23:18:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/du-doan-ti-so-champions-league-man-united-guc-nga-khi-lam-khach-truoc-atletico-madrid-100261012164246432.htm" rel="noopener noreferrer">Dự đoán tỉ số Champions League: Man United gục ngã khi làm khách trước Atletico Madrid</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Man United được dự báo sẽ gặp nhiều khó khăn trong chuyến làm khách trước Atletico Madrid tại lượt trận thứ 2 vòng phân hạng Champions League. Với phong độ thiếu ổn định của &#x27;Quỷ đỏ&#x27; và đà hưng phấn của đội chủ nhà, giới chuyên môn dự đoán Man United khó giành điểm trong trận đấu này.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/du-doan-ti-so-champions-league-man-united-guc-nga-khi-lam-khach-truoc-atletico-madrid-100261012164246432.htm" rel="noopener noreferrer">https://tuoitre.vn/du-doan-ti-so-champions-league-man-united-guc-nga-khi-lam-khach-truoc-atletico-madrid-100261012164246432.htm</a></p>
+</article>
+<article class="card card-top" data-category="thể-thao" data-ts="1791846000000">
+  <header class="card-head">
+    <span class="badge">Thể thao</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-12T23:00:00+00:00">2026-10-12T23:00:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/clb-cong-an-ha-noi-dau-kashima-antlers-quyet-tam-gianh-diem-truoc-ga-khong-lo-nhat-ban-100261012152342149.htm" rel="noopener noreferrer">CLB Công An Hà Nội đấu Kashima Antlers: Quyết tâm giành điểm trước &#x27;gã khổng lồ&#x27; Nhật Bản</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>CLB Công An Hà Nội chuẩn bị đối đầu với Kashima Antlers, đội bóng mạnh đến từ Nhật Bản, trong khuôn khổ AFC Champions League Elite. Dù đối thủ có đẳng cấp vượt trội, thầy trò HLV Alexandre Polking quyết tâm tận dụng lợi thế sân nhà Hàng Đẫy để tìm kiếm điểm số đầu tiên.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/clb-cong-an-ha-noi-dau-kashima-antlers-quyet-tam-gianh-diem-truoc-ga-khong-lo-nhat-ban-100261012152342149.htm" rel="noopener noreferrer">https://tuoitre.vn/clb-cong-an-ha-noi-dau-kashima-antlers-quyet-tam-gianh-diem-truoc-ga-khong-lo-nhat-ban-100261012152342149.htm</a></p>
+</article>
+<article class="card card-top" data-category="thể-thao" data-ts="1791845700000">
+  <header class="card-head">
+    <span class="badge">Thể thao</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-12T22:55:00+00:00">2026-10-12T22:55:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/ronaldo-the-hien-phong-do-cao-sau-vu-lum-xum-o-tuyen-bo-dao-nha-100261013054153516.htm" rel="noopener noreferrer">Ronaldo thể hiện phong độ cao sau vụ lùm xùm ở tuyển Bồ Đào Nha</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Cristiano Ronaldo tiếp tục duy trì phong độ cao khi ghi bàn trong chiến thắng 3-1 của Al Nassr trước Neftchi Fergana tại AFC Champions League Elite. Đây là pha lập công thứ 5 của anh trong mùa giải này, bất chấp những ồn ào liên quan đến việc rời khỏi đội tuyển Bồ Đào Nha gần đây.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/ronaldo-the-hien-phong-do-cao-sau-vu-lum-xum-o-tuyen-bo-dao-nha-100261013054153516.htm" rel="noopener noreferrer">https://tuoitre.vn/ronaldo-the-hien-phong-do-cao-sau-vu-lum-xum-o-tuyen-bo-dao-nha-100261013054153516.htm</a></p>
+</article>
+<article class="card card-top" data-category="thể-thao" data-ts="1791845580000">
+  <header class="card-head">
+    <span class="badge">Thể thao</span>
+    
+    <span class="src">Tuổi Trẻ Online</span>
+    <time datetime="2026-10-12T22:53:00+00:00">2026-10-12T22:53:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tuoitre.vn/lang-co-tuong-trung-quoc-lo-dan-ngoi-sao-the-he-moi-khon-nha-dai-cho-100261011194354887.htm" rel="noopener noreferrer">Làng cờ tướng Trung Quốc lo dàn ngôi sao thế hệ mới &#x27;khôn nhà dại chợ&#x27;</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Người hâm mộ và giới chuyên môn cờ tướng Trung Quốc đang bày tỏ sự lo ngại về bản lĩnh thi đấu quốc tế của các kỳ thủ trẻ nước nhà. Dù thống trị các giải đấu trong nước, dàn ngôi sao thế hệ mới liên tục mắc sai lầm và thất bại ở các giải đấu lớn như vô địch thế giới và châu Á.</p></section>
+  <p class="linkrow"><a class="full" href="https://tuoitre.vn/lang-co-tuong-trung-quoc-lo-dan-ngoi-sao-the-he-moi-khon-nha-dai-cho-100261011194354887.htm" rel="noopener noreferrer">https://tuoitre.vn/lang-co-tuong-trung-quoc-lo-dan-ngoi-sao-the-he-moi-khon-nha-dai-cho-100261011194354887.htm</a></p>
+</article>
+<h2 class="digest-section digest-section-muted">Tin từ các nguồn khác</h2>
+<article class="card" data-category="thời-sự" data-ts="1791857700000">
+  <header class="card-head">
+    <span class="badge">Thời sự</span>
+    
+    <span class="src">Thanh Niên</span>
+    <time datetime="2026-10-13T02:15:00+00:00">2026-10-13T02:15:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://thanhnien.vn/di-tau-lua-sai-gon-nha-trang-hanh-khach-co-them-wifi-va-giuong-moi-185261012225217091.htm" rel="noopener noreferrer">Đi tàu lửa Sài Gòn - Nha Trang, hành khách có thêm wifi và giường mới</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Công ty cổ phần vận tải Đường sắt vừa ra mắt đoàn tàu chất lượng cao SNT1/SNT2 trên tuyến Sài Gòn - Nha Trang với nhiều nâng cấp tiện ích. Hành khách sẽ được trải nghiệm không gian nội thất mới, hệ thống wifi tốc độ cao, camera an ninh và các dịch vụ tiện nghi hơn so với trước đây.</p></section>
+  <p class="linkrow"><a class="full" href="https://thanhnien.vn/di-tau-lua-sai-gon-nha-trang-hanh-khach-co-them-wifi-va-giuong-moi-185261012225217091.htm" rel="noopener noreferrer">https://thanhnien.vn/di-tau-lua-sai-gon-nha-trang-hanh-khach-co-them-wifi-va-giuong-moi-185261012225217091.htm</a></p>
+</article>
+<article class="card" data-category="công-nghệ" data-ts="1791857400000">
+  <header class="card-head">
+    <span class="badge">Công nghệ</span>
+    
+    <span class="src">Thanh Niên</span>
+    <time datetime="2026-10-13T02:10:00+00:00">2026-10-13T02:10:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://thanhnien.vn/ai-tac-tu-thay-doi-vai-tro-cua-nguoi-lanh-dao-cong-nghe-185261013083220903.htm" rel="noopener noreferrer">AI tác tử thay đổi vai trò của người lãnh đạo công nghệ</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Trong kỷ nguyên AI tác tử, vai trò của lãnh đạo công nghệ đang chuyển dịch từ người trực tiếp lập trình sang &#x27;huấn luyện viên&#x27; điều phối hệ thống. Các chuyên gia nhấn mạnh tầm quan trọng của việc xây dựng quy trình vận hành đồng bộ và năng lực phán đoán của con người để quản lý hiệu quả các tác tử AI trong doanh nghiệp.</p></section>
+  <p class="linkrow"><a class="full" href="https://thanhnien.vn/ai-tac-tu-thay-doi-vai-tro-cua-nguoi-lanh-dao-cong-nghe-185261013083220903.htm" rel="noopener noreferrer">https://thanhnien.vn/ai-tac-tu-thay-doi-vai-tro-cua-nguoi-lanh-dao-cong-nghe-185261013083220903.htm</a></p>
+</article>
+<article class="card" data-category="thế-giới" data-ts="1791857400000">
+  <header class="card-head">
+    <span class="badge">Thế giới</span>
+    
+    <span class="src">Thanh Niên</span>
+    <time datetime="2026-10-13T02:10:00+00:00">2026-10-13T02:10:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://thanhnien.vn/thu-tuong-anh-cao-buoc-iran-dung-sau-am-muu-tan-cong-can-cu-oanh-tac-co-b-1b-185261013082246267.htm" rel="noopener noreferrer">Thủ tướng Anh cáo buộc Iran đứng sau âm mưu tấn công căn cứ oanh tạc cơ B-1B</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Thủ tướng Anh Andy Burnham cáo buộc Lực lượng Vệ binh cách mạng Hồi giáo Iran (IRGC) đứng sau âm mưu tấn công căn cứ RAF Fairford, nơi đồn trú của máy bay ném bom Mỹ. Phía Iran đã bác bỏ cáo buộc này, trong khi Anh và các nước phương Tây lên án các hoạt động thù địch của IRGC.</p></section>
+  <p class="linkrow"><a class="full" href="https://thanhnien.vn/thu-tuong-anh-cao-buoc-iran-dung-sau-am-muu-tan-cong-can-cu-oanh-tac-co-b-1b-185261013082246267.htm" rel="noopener noreferrer">https://thanhnien.vn/thu-tuong-anh-cao-buoc-iran-dung-sau-am-muu-tan-cong-can-cu-oanh-tac-co-b-1b-185261013082246267.htm</a></p>
+</article>
+<article class="card" data-category="giáo-dục" data-ts="1791857220000">
+  <header class="card-head">
+    <span class="badge">Giáo dục</span>
+    
+    <span class="src">Thanh Niên</span>
+    <time datetime="2026-10-13T02:07:00+00:00">2026-10-13T02:07:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://thanhnien.vn/bo-gd-dt-huong-dan-7-ky-nang-so-cot-loi-tu-ai-den-bao-mat-du-lieu-185261013053744001.htm" rel="noopener noreferrer">Bộ GD-ĐT hướng dẫn 7 kỹ năng số cốt lõi: Từ AI đến bảo mật dữ liệu</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Bộ GD-ĐT đã ban hành hướng dẫn về 7 kỹ năng số cốt lõi dành cho học sinh, sinh viên trong các cơ sở giáo dục nghề nghiệp. Nội dung tập trung vào việc sử dụng thiết bị số, khai thác trí tuệ nhân tạo (AI) có trách nhiệm, tìm kiếm thông tin và bảo mật dữ liệu cá nhân.</p></section>
+  <p class="linkrow"><a class="full" href="https://thanhnien.vn/bo-gd-dt-huong-dan-7-ky-nang-so-cot-loi-tu-ai-den-bao-mat-du-lieu-185261013053744001.htm" rel="noopener noreferrer">https://thanhnien.vn/bo-gd-dt-huong-dan-7-ky-nang-so-cot-loi-tu-ai-den-bao-mat-du-lieu-185261013053744001.htm</a></p>
+</article>
+<article class="card" data-category="thời-sự" data-ts="1791857220000">
+  <header class="card-head">
+    <span class="badge">Thời sự</span>
+    
+    <span class="src">Thanh Niên</span>
+    <time datetime="2026-10-13T02:07:00+00:00">2026-10-13T02:07:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://thanhnien.vn/du-bao-thoi-tiet-hom-nay-1310-5-tinh-mien-trung-mua-lon-185261013070124922.htm" rel="noopener noreferrer">Dự báo thời tiết hôm nay 13.10: 5 tỉnh miền Trung mưa lớn</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Trung tâm Dự báo khí tượng thủy văn quốc gia cảnh báo mưa lớn tại 5 tỉnh miền Trung gồm Quảng Trị, Huế, Đà Nẵng, Quảng Ngãi và Đắk Lắk trong ngày 13.10. Khu vực này đối mặt với nguy cơ cao xảy ra lũ quét và sạt lở đất do lượng mưa tích lũy lớn. Trong khi đó, Nam bộ và Lâm Đồng cũng có mưa rào và giông rải rác, người dân cần đề phòng các hiện tượng thời tiết cực đoan.</p></section>
+  <p class="linkrow"><a class="full" href="https://thanhnien.vn/du-bao-thoi-tiet-hom-nay-1310-5-tinh-mien-trung-mua-lon-185261013070124922.htm" rel="noopener noreferrer">https://thanhnien.vn/du-bao-thoi-tiet-hom-nay-1310-5-tinh-mien-trung-mua-lon-185261013070124922.htm</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791856800000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">Thanh Niên</span>
+    <time datetime="2026-10-13T02:00:00+00:00">2026-10-13T02:00:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://thanhnien.vn/anh-hung-lao-dong-nguyen-thi-nga-toi-la-nguoi-viet-nam-185261003173039086.htm" rel="noopener noreferrer">Anh hùng Lao động Nguyễn Thị Nga: “Tôi là người Việt Nam”</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Bà Nguyễn Thị Nga, Chủ tịch Tập đoàn BRG, chia sẻ về niềm tự hào dân tộc và khát vọng đưa thương hiệu Việt vươn tầm quốc tế. Với triết lý kinh doanh không chỉ vì lợi nhuận mà còn đóng góp cho cộng đồng, bà đã dẫn dắt BRG phát triển đa ngành, tạo việc làm cho hàng chục nghìn người và gìn giữ các giá trị văn hóa truyền thống như gốm Chu Đậu.</p></section>
+  <p class="linkrow"><a class="full" href="https://thanhnien.vn/anh-hung-lao-dong-nguyen-thi-nga-toi-la-nguoi-viet-nam-185261003173039086.htm" rel="noopener noreferrer">https://thanhnien.vn/anh-hung-lao-dong-nguyen-thi-nga-toi-la-nguoi-viet-nam-185261003173039086.htm</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791856800000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">Thanh Niên</span>
+    <time datetime="2026-10-13T02:00:00+00:00">2026-10-13T02:00:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://thanhnien.vn/cang-hang-khong-quang-tri-tang-toc-ve-dich-gop-phan-tao-dong-luc-tang-truong-cho-dia-phuong-185261013072616709.htm" rel="noopener noreferrer">Cảng hàng không Quảng Trị tăng tốc về đích, góp phần tạo động lực tăng trưởng cho địa phương</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Dự án Cảng hàng không Quảng Trị đang đẩy nhanh tiến độ, dự kiến vận hành thương mại vào tháng 3.2027. Sân bay này được kỳ vọng sẽ trở thành động lực quan trọng thúc đẩy kinh tế, du lịch và kết nối giao thông cho tỉnh Quảng Trị, đồng thời tạo điều kiện thuận lợi cho việc đi lại và vận chuyển hàng hóa.</p></section>
+  <p class="linkrow"><a class="full" href="https://thanhnien.vn/cang-hang-khong-quang-tri-tang-toc-ve-dich-gop-phan-tao-dong-luc-tang-truong-cho-dia-phuong-185261013072616709.htm" rel="noopener noreferrer">https://thanhnien.vn/cang-hang-khong-quang-tri-tang-toc-ve-dich-gop-phan-tao-dong-luc-tang-truong-cho-dia-phuong-185261013072616709.htm</a></p>
+</article>
+<article class="card" data-category="văn-hóa-giải-trí" data-ts="1791856800000">
+  <header class="card-head">
+    <span class="badge">Văn hóa – Giải trí</span>
+    
+    <span class="src">Thanh Niên</span>
+    <time datetime="2026-10-13T02:00:00+00:00">2026-10-13T02:00:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://thanhnien.vn/nguoi-giu-ky-uc-qua-hon-600000-to-bao-185261011143738279.htm" rel="noopener noreferrer">Người giữ ký ức qua hơn 600.000 tờ báo</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Ông Nguyễn Phi Dũng đã xác lập kỷ lục Việt Nam với bộ sưu tập hơn 600.000 tờ báo giấy phát hành từ cuối thế kỷ 19 đến nay. Với niềm đam mê kế thừa từ người cha, ông đang nỗ lực số hóa và bảo quản kho tư liệu đồ sộ này, đồng thời hướng tới mục tiêu ghi nhận kỷ lục ở tầm châu Á để lan tỏa giá trị lịch sử báo chí nước nhà.</p></section>
+  <p class="linkrow"><a class="full" href="https://thanhnien.vn/nguoi-giu-ky-uc-qua-hon-600000-to-bao-185261011143738279.htm" rel="noopener noreferrer">https://thanhnien.vn/nguoi-giu-ky-uc-qua-hon-600000-to-bao-185261011143738279.htm</a></p>
+</article>
+<article class="card" data-category="thế-giới" data-ts="1791856500000">
+  <header class="card-head">
+    <span class="badge">Thế giới</span>
+    
+    <span class="src">Thanh Niên</span>
+    <time datetime="2026-10-13T01:55:00+00:00">2026-10-13T01:55:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://thanhnien.vn/ti-phu-musk-gop-gan-280-trieu-truoc-them-bau-cu-giua-nhiem-ky-my-185261013080816608.htm" rel="noopener noreferrer">Tỉ phú Musk góp gần 280 triệu trước thềm bầu cử giữa nhiệm kỳ Mỹ</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Tỉ phú Elon Musk đã đóng góp gần 280 triệu USD cho các tổ chức hỗ trợ chiến dịch tranh cử của đảng Cộng hòa trước thềm bầu cử giữa nhiệm kỳ tại Mỹ. Khoản tài trợ này đưa ông trở thành nhà tài trợ cá nhân lớn nhất cho cuộc bầu cử sắp tới, tiếp nối chuỗi hoạt động chính trị tích cực của ông trong thời gian qua.</p></section>
+  <p class="linkrow"><a class="full" href="https://thanhnien.vn/ti-phu-musk-gop-gan-280-trieu-truoc-them-bau-cu-giua-nhiem-ky-my-185261013080816608.htm" rel="noopener noreferrer">https://thanhnien.vn/ti-phu-musk-gop-gan-280-trieu-truoc-them-bau-cu-giua-nhiem-ky-my-185261013080816608.htm</a></p>
+</article>
+<article class="card" data-category="pháp-luật" data-ts="1791856320000">
+  <header class="card-head">
+    <span class="badge">Pháp luật</span>
+    
+    <span class="src">Thanh Niên</span>
+    <time datetime="2026-10-13T01:52:00+00:00">2026-10-13T01:52:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://thanhnien.vn/nhap-canh-du-lich-viet-nam-4-bi-can-truy-na-quoc-te-bi-bat-185261013074251418.htm" rel="noopener noreferrer">Nhập cảnh du lịch Việt Nam, 4 bị can truy nã quốc tế bị bắt</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Công an TP.Đà Nẵng vừa bắt giữ 4 bị can bị Interpol truy nã quốc tế khi các đối tượng này đang lẩn trốn dưới vỏ bọc khách du lịch. Trong đó có 3 người Hàn Quốc và 1 người Mông Cổ, tất cả đã được bàn giao cho cảnh sát sở tại để xử lý theo quy định pháp luật.</p></section>
+  <p class="linkrow"><a class="full" href="https://thanhnien.vn/nhap-canh-du-lich-viet-nam-4-bi-can-truy-na-quoc-te-bi-bat-185261013074251418.htm" rel="noopener noreferrer">https://thanhnien.vn/nhap-canh-du-lich-viet-nam-4-bi-can-truy-na-quoc-te-bi-bat-185261013074251418.htm</a></p>
+</article>
+<article class="card" data-category="thời-sự" data-ts="1791850620000">
+  <header class="card-head">
+    <span class="badge">Thời sự</span>
+    
+    <span class="src">Dân Trí</span>
+    <time datetime="2026-10-13T00:17:00+00:00">2026-10-13T00:17:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://dantri.com.vn/noi-vu/lo-trinh-dua-731-hai-cot-liet-si-tu-cong-vien-le-thi-rieng-den-nghia-trang-20261012205227437.htm" rel="noopener noreferrer">Lộ trình đưa 731 hài cốt liệt sĩ từ Công viên Lê Thị Riêng đến nghĩa trang</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>TP.HCM đã tổ chức lễ tổng duyệt cho việc di dời 731 hài cốt liệt sĩ từ Công viên Lê Thị Riêng về Nghĩa trang Liệt sĩ thành phố. Lộ trình di chuyển sẽ đi qua nhiều tuyến đường thuộc 11 phường, đảm bảo sự trang nghiêm và thành kính để người dân có thể tiễn đưa các anh hùng liệt sĩ về nơi an nghỉ cuối cùng.</p></section>
+  <p class="linkrow"><a class="full" href="https://dantri.com.vn/noi-vu/lo-trinh-dua-731-hai-cot-liet-si-tu-cong-vien-le-thi-rieng-den-nghia-trang-20261012205227437.htm" rel="noopener noreferrer">https://dantri.com.vn/noi-vu/lo-trinh-dua-731-hai-cot-liet-si-tu-cong-vien-le-thi-rieng-den-nghia-trang-20261012205227437.htm</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791850608000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">Dân Trí</span>
+    <time datetime="2026-10-13T00:16:48+00:00">2026-10-13T00:16:48+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://dantri.com.vn/kinh-doanh/gia-vang-lai-giam-nguoi-mua-tu-dinh-van-dang-lo-50-trieu-dongluong-20261013070218568.htm" rel="noopener noreferrer">Giá vàng lại giảm, người mua từ đỉnh vẫn đang lỗ 50 triệu đồng/lượng</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Giá vàng trong nước và thế giới đồng loạt giảm trong bối cảnh đồng USD mạnh lên và thị trường thận trọng theo dõi các dữ liệu kinh tế Mỹ. Với mức giá hiện tại, những nhà đầu tư mua vàng từ đỉnh hồi đầu năm vẫn đang chịu khoản lỗ lên tới 50 triệu đồng/lượng.</p></section>
+  <p class="linkrow"><a class="full" href="https://dantri.com.vn/kinh-doanh/gia-vang-lai-giam-nguoi-mua-tu-dinh-van-dang-lo-50-trieu-dongluong-20261013070218568.htm" rel="noopener noreferrer">https://dantri.com.vn/kinh-doanh/gia-vang-lai-giam-nguoi-mua-tu-dinh-van-dang-lo-50-trieu-dongluong-20261013070218568.htm</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791850580000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">Dân Trí</span>
+    <time datetime="2026-10-13T00:16:20+00:00">2026-10-13T00:16:20+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://dantri.com.vn/tam-diem/doanh-nhan-viet-nam-truoc-su-menh-moi-cua-nen-kinh-te-20261012235348935.htm" rel="noopener noreferrer">Doanh nhân Việt Nam trước sứ mệnh mới của nền kinh tế</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Doanh nhân Việt Nam đang đứng trước sứ mệnh mới là nâng cấp nền kinh tế, chuyển dịch từ gia công sang làm chủ công nghệ và sáng tạo. Thay vì chỉ dựa vào lợi thế lao động và tài nguyên, thế hệ doanh nhân mới được kỳ vọng sẽ tạo ra các sản phẩm có giá trị cao, sở hữu trí tuệ và thương hiệu vươn tầm quốc tế.</p></section>
+  <p class="linkrow"><a class="full" href="https://dantri.com.vn/tam-diem/doanh-nhan-viet-nam-truoc-su-menh-moi-cua-nen-kinh-te-20261012235348935.htm" rel="noopener noreferrer">https://dantri.com.vn/tam-diem/doanh-nhan-viet-nam-truoc-su-menh-moi-cua-nen-kinh-te-20261012235348935.htm</a></p>
+</article>
+<article class="card" data-category="công-nghệ" data-ts="1791850233000">
+  <header class="card-head">
+    <span class="badge">Công nghệ</span>
+    
+    <span class="src">Dân Trí</span>
+    <time datetime="2026-10-13T00:10:33+00:00">2026-10-13T00:10:33+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://dantri.com.vn/cong-nghe/se-ra-sao-neu-ban-duoc-song-mot-cuoc-doi-khac-giua-8-ty-nguoi-20261012234649932.htm" rel="noopener noreferrer">Sẽ ra sao nếu bạn được sống một cuộc đời khác giữa 8 tỷ người?</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Website mô phỏng &quot;1 in 8 Billion&quot; cho phép người dùng trải nghiệm một cuộc đời ngẫu nhiên dựa trên dữ liệu thực tế từ 141 quốc gia. Trò chơi sử dụng các chỉ số như tuổi thọ, thu nhập và điều kiện xã hội để tạo ra kịch bản sống động, giúp người chơi thấu hiểu hơn về sự khác biệt và cơ hội trong cuộc sống giữa 8 tỷ người trên thế giới.</p></section>
+  <p class="linkrow"><a class="full" href="https://dantri.com.vn/cong-nghe/se-ra-sao-neu-ban-duoc-song-mot-cuoc-doi-khac-giua-8-ty-nguoi-20261012234649932.htm" rel="noopener noreferrer">https://dantri.com.vn/cong-nghe/se-ra-sao-neu-ban-duoc-song-mot-cuoc-doi-khac-giua-8-ty-nguoi-20261012234649932.htm</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791849600000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">Dân Trí</span>
+    <time datetime="2026-10-13T00:00:00+00:00">2026-10-13T00:00:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://dantri.com.vn/bat-dong-san/mot-goc-nhin-moi-ve-trai-nghiem-bat-dong-san-tai-phia-dong-bac-tphcm-20261012185152881.htm" rel="noopener noreferrer">Một góc nhìn mới về trải nghiệm bất động sản tại phía Đông Bắc TPHCM</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Dự án The Collection 688 tại khu vực Đông Bắc TP.HCM đang áp dụng mô hình Experience Gallery kết hợp sa bàn và căn hộ mẫu để khách hàng có cái nhìn trực quan nhất. Cách tiếp cận này giúp người mua dễ dàng hình dung về quy hoạch, kết nối giao thông và không gian sống thực tế trước khi đưa ra quyết định đầu tư.</p></section>
+  <p class="linkrow"><a class="full" href="https://dantri.com.vn/bat-dong-san/mot-goc-nhin-moi-ve-trai-nghiem-bat-dong-san-tai-phia-dong-bac-tphcm-20261012185152881.htm" rel="noopener noreferrer">https://dantri.com.vn/bat-dong-san/mot-goc-nhin-moi-ve-trai-nghiem-bat-dong-san-tai-phia-dong-bac-tphcm-20261012185152881.htm</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791849600000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">Dân Trí</span>
+    <time datetime="2026-10-13T00:00:00+00:00">2026-10-13T00:00:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://dantri.com.vn/kinh-doanh/sang-nay-dien-ra-toa-dam-doanh-nghiep-tim-von-cho-chu-ky-tang-truong-moi-20261012230907960.htm" rel="noopener noreferrer">Sáng nay diễn ra tọa đàm “Doanh nghiệp tìm vốn cho chu kỳ tăng trưởng mới”</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Báo Dân trí tổ chức tọa đàm “Doanh nghiệp tìm vốn cho chu kỳ tăng trưởng mới” vào sáng 13/10 nhằm thảo luận về các giải pháp huy động vốn đa dạng. Chương trình tập trung vào việc giảm phụ thuộc vào tín dụng ngân hàng, quản trị rủi ro lãi suất và tỷ giá trong bối cảnh thị trường tài chính có nhiều biến động.</p></section>
+  <p class="linkrow"><a class="full" href="https://dantri.com.vn/kinh-doanh/sang-nay-dien-ra-toa-dam-doanh-nghiep-tim-von-cho-chu-ky-tang-truong-moi-20261012230907960.htm" rel="noopener noreferrer">https://dantri.com.vn/kinh-doanh/sang-nay-dien-ra-toa-dam-doanh-nghiep-tim-von-cho-chu-ky-tang-truong-moi-20261012230907960.htm</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791849600000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">Dân Trí</span>
+    <time datetime="2026-10-13T00:00:00+00:00">2026-10-13T00:00:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://dantri.com.vn/o-to-xe-may/mazda-cx-90-suv-flagship-chinh-phuc-doanh-nhan-uu-tien-trai-nghiem-moi-20261009145635781.htm" rel="noopener noreferrer">Mazda CX-90: SUV flagship chinh phục doanh nhân ưu tiên trải nghiệm mới</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Mẫu SUV flagship Mazda CX-90 nhận được đánh giá tích cực từ khách hàng nhờ thiết kế sang trọng, không gian nội thất cao cấp và khả năng vận hành mạnh mẽ. Xe hiện có hai tùy chọn động cơ PHEV và HEV, cùng cấu hình 6 hoặc 7 chỗ ngồi, đáp ứng đa dạng nhu cầu sử dụng từ công việc đến gia đình. Sản phẩm đang được bán với giá ưu đãi từ 1,899 tỷ đồng kèm chế độ bảo hành chính hãng 5 năm.</p></section>
+  <p class="linkrow"><a class="full" href="https://dantri.com.vn/o-to-xe-may/mazda-cx-90-suv-flagship-chinh-phuc-doanh-nhan-uu-tien-trai-nghiem-moi-20261009145635781.htm" rel="noopener noreferrer">https://dantri.com.vn/o-to-xe-may/mazda-cx-90-suv-flagship-chinh-phuc-doanh-nhan-uu-tien-trai-nghiem-moi-20261009145635781.htm</a></p>
+</article>
+<article class="card" data-category="thế-giới" data-ts="1791849559000">
+  <header class="card-head">
+    <span class="badge">Thế giới</span>
+    
+    <span class="src">Dân Trí</span>
+    <time datetime="2026-10-12T23:59:19+00:00">2026-10-12T23:59:19+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://dantri.com.vn/bat-dong-san/khi-hop-dong-40-nam-ket-thuc-trung-quoc-xu-ly-ra-sao-voi-dat-thuong-mai-20261013065031767.htm" rel="noopener noreferrer">Khi hợp đồng 40 năm kết thúc, Trung Quốc xử lý ra sao với đất thương mại?</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Trước lo ngại về việc hết hạn quyền sử dụng đất thương mại, các thành phố lớn tại Trung Quốc như Thượng Hải và Quảng Châu đã công bố giải pháp gia hạn hợp đồng với mức phí được quy định cụ thể. Chính sách này được kỳ vọng sẽ giúp ổn định thị trường bất động sản, khơi thông tài sản và củng cố niềm tin cho các nhà đầu tư. Đây được xem là bước đi quan trọng nhằm xử lý các lỗ hổng pháp lý và thúc đẩy cải tạo đô thị.</p></section>
+  <p class="linkrow"><a class="full" href="https://dantri.com.vn/bat-dong-san/khi-hop-dong-40-nam-ket-thuc-trung-quoc-xu-ly-ra-sao-voi-dat-thuong-mai-20261013065031767.htm" rel="noopener noreferrer">https://dantri.com.vn/bat-dong-san/khi-hop-dong-40-nam-ket-thuc-trung-quoc-xu-ly-ra-sao-voi-dat-thuong-mai-20261013065031767.htm</a></p>
+</article>
+<article class="card" data-category="thời-sự" data-ts="1791849000000">
+  <header class="card-head">
+    <span class="badge">Thời sự</span>
+    
+    <span class="src">Dân Trí</span>
+    <time datetime="2026-10-12T23:50:00+00:00">2026-10-12T23:50:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://dantri.com.vn/thoi-su/mua-ve-di-metro-so-1-tphcm-qua-ung-dung-vneid-tu-ngay-1510-20261012211518982.htm" rel="noopener noreferrer">Mua vé đi Metro số 1 TPHCM qua ứng dụng VNeID từ ngày 15/10</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Từ ngày 15/10, hành khách đi tuyến Metro số 1 Bến Thành - Suối Tiên có thể mua vé và sử dụng tiện ích trên tàu thông qua ứng dụng định danh điện tử VNeID. Hệ thống cho phép lựa chọn nhiều loại vé khác nhau và thanh toán trực tuyến, giúp đa dạng hóa phương thức thanh toán cho người dân. Đối với vé tháng, hành khách có thể quét trực tiếp thẻ căn cước gắn chip tại cổng soát vé.</p></section>
+  <p class="linkrow"><a class="full" href="https://dantri.com.vn/thoi-su/mua-ve-di-metro-so-1-tphcm-qua-ung-dung-vneid-tu-ngay-1510-20261012211518982.htm" rel="noopener noreferrer">https://dantri.com.vn/thoi-su/mua-ve-di-metro-so-1-tphcm-qua-ung-dung-vneid-tu-ngay-1510-20261012211518982.htm</a></p>
+</article>
+<article class="card" data-category="thế-giới" data-ts="1791848572000">
+  <header class="card-head">
+    <span class="badge">Thế giới</span>
+    
+    <span class="src">Dân Trí</span>
+    <time datetime="2026-10-12T23:42:52+00:00">2026-10-12T23:42:52+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://dantri.com.vn/the-gioi/nato-tiet-lo-kich-ban-dap-tra-neu-nga-tan-cong-dong-minh-20261013061629075.htm" rel="noopener noreferrer">NATO tiết lộ kịch bản đáp trả nếu Nga tấn công đồng minh</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Tư lệnh Tối cao của NATO tại châu Âu, Tướng Alexus Grynkewich, đã phác thảo chiến lược 3 bước gồm ngăn chặn, làm suy yếu và phá hủy lực lượng đối phương nếu xảy ra tấn công vào các nước đồng minh. NATO khẳng định phản ứng của liên minh sẽ không chỉ giới hạn ở lực lượng tấn công ban đầu mà còn nhắm vào hệ thống hỗ trợ, duy trì của đối phương. Kế hoạch này nhằm trấn an người dân trong khối và gửi thông điệp răn đe tới bất kỳ bên nào có ý định gây hại.</p></section>
+  <p class="linkrow"><a class="full" href="https://dantri.com.vn/the-gioi/nato-tiet-lo-kich-ban-dap-tra-neu-nga-tan-cong-dong-minh-20261013061629075.htm" rel="noopener noreferrer">https://dantri.com.vn/the-gioi/nato-tiet-lo-kich-ban-dap-tra-neu-nga-tan-cong-dong-minh-20261013061629075.htm</a></p>
+</article>
+<article class="card" data-category="văn-hóa-giải-trí" data-ts="1791796536000">
+  <header class="card-head">
+    <span class="badge">Văn hóa – Giải trí</span>
+    
+    <span class="src">VnExpress — Tin nổi bật</span>
+    <time datetime="2026-10-12T09:15:36+00:00">2026-10-12T09:15:36+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://vnexpress.net/ha-noi-se-to-chuc-concert-60-000-khan-gia-ngay-van-hoa-viet-nam-5131327.html" rel="noopener noreferrer">Hà Nội sẽ tổ chức concert 60.000 khán giả Ngày Văn hóa Việt Nam</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Hà Nội được giao nhiệm vụ tổ chức chương trình nghệ thuật và concert quy mô 60.000 khán giả để chào mừng Ngày Văn hóa Việt Nam vào ngày 24/11 tới. Sự kiện nằm trong chuỗi hoạt động Tuần Văn hóa - Đại đoàn kết toàn dân tộc, nhằm tạo dấu ấn và lan tỏa giá trị văn hóa đến cộng đồng. Bộ Văn hóa, Thể thao và Du lịch đang phối hợp với thành phố để lên kế hoạch chi tiết, đảm bảo an toàn và ý nghĩa.</p></section>
+  <p class="linkrow"><a class="full" href="https://vnexpress.net/ha-noi-se-to-chuc-concert-60-000-khan-gia-ngay-van-hoa-viet-nam-5131327.html" rel="noopener noreferrer">https://vnexpress.net/ha-noi-se-to-chuc-concert-60-000-khan-gia-ngay-van-hoa-viet-nam-5131327.html</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791794792000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">VnExpress — Tin nổi bật</span>
+    <time datetime="2026-10-12T08:46:32+00:00">2026-10-12T08:46:32+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://vnexpress.net/nu-khach-hang-trung-jackpot-ky-luc-gan-200-ty-dong-5131290.html" rel="noopener noreferrer">Nữ khách hàng trúng Jackpot kỷ lục gần 200 tỷ đồng</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Một nữ khách hàng tại An Giang vừa trúng giải Jackpot của sản phẩm Mega 6/45 với giá trị kỷ lục gần 200 tỷ đồng. Đây là giải thưởng lớn nhất từ khi Vietlott bắt đầu kinh doanh vào năm 2016 và là khách hàng nữ thứ 23 trúng giải này. Sau khi thực hiện nghĩa vụ thuế, người trúng giải nhận về hơn 179,6 tỷ đồng và đã trích 5 tỷ đồng để làm từ thiện.</p></section>
+  <p class="linkrow"><a class="full" href="https://vnexpress.net/nu-khach-hang-trung-jackpot-ky-luc-gan-200-ty-dong-5131290.html" rel="noopener noreferrer">https://vnexpress.net/nu-khach-hang-trung-jackpot-ky-luc-gan-200-ty-dong-5131290.html</a></p>
+</article>
+<article class="card" data-category="thể-thao" data-ts="1791793402000">
+  <header class="card-head">
+    <span class="badge">Thể thao</span>
+    
+    <span class="src">VnExpress — Tin nổi bật</span>
+    <time datetime="2026-10-12T08:23:22+00:00">2026-10-12T08:23:22+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://vnexpress.net/ronaldo-va-cuoc-khung-hoang-khong-co-nguoi-thang-o-bo-dao-nha-5131321.html" rel="noopener noreferrer">Ronaldo và cuộc khủng hoảng không có người thắng ở Bồ Đào Nha</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Cuộc khủng hoảng liên quan đến việc Cristiano Ronaldo rời nơi tập trung đội tuyển Bồ Đào Nha đang gây ra nhiều tranh cãi và dư chấn. Các chuyên gia cho rằng cả Liên đoàn Bóng đá Bồ Đào Nha, HLV Jorge Jesus và chính Ronaldo đều chịu tổn thất về hình ảnh sau sự việc này. Hiện tại, sự thiếu rõ ràng trong cách xử lý và giao tiếp giữa các bên đã khiến mâu thuẫn trở nên phức tạp hơn.</p></section>
+  <p class="linkrow"><a class="full" href="https://vnexpress.net/ronaldo-va-cuoc-khung-hoang-khong-co-nguoi-thang-o-bo-dao-nha-5131321.html" rel="noopener noreferrer">https://vnexpress.net/ronaldo-va-cuoc-khung-hoang-khong-co-nguoi-thang-o-bo-dao-nha-5131321.html</a></p>
+</article>
+<article class="card" data-category="sức-khỏe" data-ts="1791792770000">
+  <header class="card-head">
+    <span class="badge">Sức khỏe</span>
+    
+    <span class="src">VnExpress — Tin nổi bật</span>
+    <time datetime="2026-10-12T08:12:50+00:00">2026-10-12T08:12:50+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://vnexpress.net/39-tre-3-thai-phu-o-quang-ngai-nghi-ngo-doc-sau-an-banh-mi-5131313.html" rel="noopener noreferrer">39 trẻ, 3 thai phụ ở Quảng Ngãi nghi ngộ độc sau ăn bánh mì</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Sở Y tế Quảng Ngãi ghi nhận 135 người nhập viện với các triệu chứng nghi ngộ độc thực phẩm sau khi ăn bánh mì tại một điểm bán trên vỉa hè, trong đó có 39 trẻ em và 3 thai phụ. Cơ quan chức năng đã niêm phong thực phẩm, tạm ngừng kinh doanh điểm bán này và lấy mẫu xét nghiệm để điều tra nguyên nhân. Các bệnh nhân đang được điều trị tại 6 cơ sở y tế với tình trạng sức khỏe tạm ổn định.</p></section>
+  <p class="linkrow"><a class="full" href="https://vnexpress.net/39-tre-3-thai-phu-o-quang-ngai-nghi-ngo-doc-sau-an-banh-mi-5131313.html" rel="noopener noreferrer">https://vnexpress.net/39-tre-3-thai-phu-o-quang-ngai-nghi-ngo-doc-sau-an-banh-mi-5131313.html</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791792412000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">VnExpress — Tin nổi bật</span>
+    <time datetime="2026-10-12T08:06:52+00:00">2026-10-12T08:06:52+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://vnexpress.net/bo-tai-chinh-siet-thoi-gian-xu-ly-thu-tuc-giai-the-doanh-nghiep-5131285.html" rel="noopener noreferrer">Bộ Tài chính siết thời gian xử lý thủ tục giải thể doanh nghiệp</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Bộ Tài chính vừa yêu cầu rút ngắn thời gian xử lý thủ tục giải thể doanh nghiệp, trong đó cơ quan đăng ký kinh doanh chỉ có 1 ngày làm việc để cập nhật trạng thái &quot;đã giải thể&quot; sau khi doanh nghiệp hoàn tất nghĩa vụ thuế. Nếu cơ quan thuế không phản hồi sau hai ngày, doanh nghiệp sẽ tự động được ghi nhận đã giải thể. Quy định mới này nhằm đẩy nhanh tiến độ xử lý hồ sơ và giảm bớt thủ tục hành chính cho doanh nghiệp.</p></section>
+  <p class="linkrow"><a class="full" href="https://vnexpress.net/bo-tai-chinh-siet-thoi-gian-xu-ly-thu-tuc-giai-the-doanh-nghiep-5131285.html" rel="noopener noreferrer">https://vnexpress.net/bo-tai-chinh-siet-thoi-gian-xu-ly-thu-tuc-giai-the-doanh-nghiep-5131285.html</a></p>
+</article>
+<article class="card" data-category="thế-giới" data-ts="1791788701000">
+  <header class="card-head">
+    <span class="badge">Thế giới</span>
+    
+    <span class="src">VnExpress — Tin nổi bật</span>
+    <time datetime="2026-10-12T07:05:01+00:00">2026-10-12T07:05:01+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://vnexpress.net/trieu-tien-phong-loat-ten-lua-dan-dao-han-quoc-hop-khan-5131240.html" rel="noopener noreferrer">Triều Tiên phóng loạt tên lửa đạn đạo, Hàn Quốc họp khẩn</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Triều Tiên vừa phóng loạt tên lửa đạn đạo ra vùng biển phía đông, khiến Văn phòng An ninh Quốc gia Hàn Quốc phải tổ chức họp khẩn. Hàn Quốc lên án hành động này là vi phạm nghị quyết của Hội đồng Bảo an Liên Hợp Quốc và cho rằng đây là động thái đáp trả các thử nghiệm vũ khí gần đây của Seoul. Các chuyên gia nhận định Triều Tiên đang muốn tăng cường vị thế trước các sự kiện ngoại giao tiềm năng.</p></section>
+  <p class="linkrow"><a class="full" href="https://vnexpress.net/trieu-tien-phong-loat-ten-lua-dan-dao-han-quoc-hop-khan-5131240.html" rel="noopener noreferrer">https://vnexpress.net/trieu-tien-phong-loat-ten-lua-dan-dao-han-quoc-hop-khan-5131240.html</a></p>
+</article>
+<article class="card" data-category="thế-giới" data-ts="1791788039000">
+  <header class="card-head">
+    <span class="badge">Thế giới</span>
+    
+    <span class="src">VnExpress — Tin nổi bật</span>
+    <time datetime="2026-10-12T06:53:59+00:00">2026-10-12T06:53:59+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://vnexpress.net/elon-musk-da-den-luc-ukraine-co-lanh-dao-moi-5131205.html" rel="noopener noreferrer">Elon Musk: Đã đến lúc Ukraine có lãnh đạo mới</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Tỷ phú Elon Musk đã bày tỏ sự đồng tình với quan điểm của Tổng thống Mỹ Donald Trump rằng đã đến lúc Ukraine cần có một lãnh đạo mới. Trước đó, ông Trump đã chỉ trích Tổng thống Zelensky vì không đạt thỏa thuận với Nga và tấn công các nhà máy lọc dầu. Phía Ukraine hiện chưa đưa ra phản hồi chính thức về các ý kiến này.</p></section>
+  <p class="linkrow"><a class="full" href="https://vnexpress.net/elon-musk-da-den-luc-ukraine-co-lanh-dao-moi-5131205.html" rel="noopener noreferrer">https://vnexpress.net/elon-musk-da-den-luc-ukraine-co-lanh-dao-moi-5131205.html</a></p>
+</article>
+<article class="card" data-category="thời-sự" data-ts="1791782698000">
+  <header class="card-head">
+    <span class="badge">Thời sự</span>
+    
+    <span class="src">VnExpress — Tin nổi bật</span>
+    <time datetime="2026-10-12T05:24:58+00:00">2026-10-12T05:24:58+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://vnexpress.net/nhieu-truong-o-tp-hcm-cho-hoc-sinh-ve-som-tranh-trieu-cuong-5131253.html" rel="noopener noreferrer">Nhiều trường ở TP HCM cho học sinh về sớm, tránh triều cường</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Nhiều trường học tại TP HCM đã chủ động điều chỉnh thời gian tan học sớm hơn thường lệ từ 30 phút đến hai tiếng để học sinh tránh đỉnh triều cường dự báo lên đến 1,95m. Các trường cũng khuyến khích phụ huynh đón con sớm và bố trí giám thị quản lý học sinh chưa thể về nhà. Việc điều chỉnh này nhằm đảm bảo an toàn cho học sinh trước tình trạng ngập lụt tại nhiều khu vực.</p></section>
+  <p class="linkrow"><a class="full" href="https://vnexpress.net/nhieu-truong-o-tp-hcm-cho-hoc-sinh-ve-som-tranh-trieu-cuong-5131253.html" rel="noopener noreferrer">https://vnexpress.net/nhieu-truong-o-tp-hcm-cho-hoc-sinh-ve-som-tranh-trieu-cuong-5131253.html</a></p>
+</article>
+<article class="card" data-category="thời-sự" data-ts="1791780622000">
+  <header class="card-head">
+    <span class="badge">Thời sự</span>
+    
+    <span class="src">VnExpress — Tin nổi bật</span>
+    <time datetime="2026-10-12T04:50:22+00:00">2026-10-12T04:50:22+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://vnexpress.net/gara-oto-o-tp-hcm-chay-ngun-ngut-5131251.html" rel="noopener noreferrer">Gara ôtô ở TP HCM cháy ngùn ngụt</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Sáng 12/10, một gara ôtô rộng hơn 150 m2 tại phường Chánh Hưng, TP HCM đã xảy ra hỏa hoạn lớn khiến một ôtô bị thiêu rụi trơ khung, nhiều tài sản và máy móc bị hư hại. Lực lượng chức năng đã kịp thời có mặt khống chế đám cháy, không ghi nhận thương vong về người. Cùng ngày, tại An Giang cũng xảy ra hai vụ cháy cửa hàng điện máy và nhà dân gây thiệt hại lớn về tài sản.</p></section>
+  <p class="linkrow"><a class="full" href="https://vnexpress.net/gara-oto-o-tp-hcm-chay-ngun-ngut-5131251.html" rel="noopener noreferrer">https://vnexpress.net/gara-oto-o-tp-hcm-chay-ngun-ngut-5131251.html</a></p>
+</article>
+<article class="card" data-category="pháp-luật" data-ts="1791779146000">
+  <header class="card-head">
+    <span class="badge">Pháp luật</span>
+    
+    <span class="src">VnExpress — Tin nổi bật</span>
+    <time datetime="2026-10-12T04:25:46+00:00">2026-10-12T04:25:46+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://vnexpress.net/shark-thuy-bi-truy-to-vi-chiem-doat-8-459-ty-dong-5131215.html" rel="noopener noreferrer">Shark Thủy bị truy tố vì chiếm đoạt 8.459 tỷ đồng</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Ông Nguyễn Ngọc Thủy (Shark Thủy) cùng 28 đồng phạm vừa bị VKSND Tối cao truy tố về các tội danh liên quan đến lừa đảo chiếm đoạt tài sản và đưa hối lộ. Cơ quan điều tra cáo buộc ông Thủy đã chỉ đạo nâng khống vốn điều lệ và lôi kéo nhà đầu tư để chiếm đoạt hơn 8.459 tỷ đồng của hơn 10.000 bị hại thông qua hệ sinh thái Egroup.</p></section>
+  <p class="linkrow"><a class="full" href="https://vnexpress.net/shark-thuy-bi-truy-to-vi-chiem-doat-8-459-ty-dong-5131215.html" rel="noopener noreferrer">https://vnexpress.net/shark-thuy-bi-truy-to-vi-chiem-doat-8-459-ty-dong-5131215.html</a></p>
+</article>
+<article class="card" data-category="sức-khỏe" data-ts="1791857891000">
+  <header class="card-head">
+    <span class="badge">Sức khỏe</span>
+    
+    <span class="src">Báo Tin Tức — Tin mới</span>
+    <time datetime="2026-10-13T02:18:11+00:00">2026-10-13T02:18:11+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://baotintuc.vn/lam-ro-vu-be-gai-34-thang-tuoi-tu-vong-sau-khi-nhap-vien-post1393738.html" rel="noopener noreferrer">Làm rõ vụ bé gái 34 tháng tuổi tử vong sau khi nhập viện</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Nội dung bài viết không đề cập đến vụ việc bé gái tử vong như tiêu đề, mà chỉ cung cấp thông tin chung về việc ngành y tế triển khai các giải pháp nâng cao chất lượng dịch vụ theo Nghị quyết 72-NQ/TW. Thông tin chi tiết về vụ việc nêu trong tiêu đề không có trong văn bản được cung cấp.</p></section>
+  <p class="linkrow"><a class="full" href="https://baotintuc.vn/lam-ro-vu-be-gai-34-thang-tuoi-tu-vong-sau-khi-nhap-vien-post1393738.html" rel="noopener noreferrer">https://baotintuc.vn/lam-ro-vu-be-gai-34-thang-tuoi-tu-vong-sau-khi-nhap-vien-post1393738.html</a></p>
+</article>
+<article class="card" data-category="công-nghệ" data-ts="1791857668000">
+  <header class="card-head">
+    <span class="badge">Công nghệ</span>
+    
+    <span class="src">Báo Tin Tức — Tin mới</span>
+    <time datetime="2026-10-13T02:14:28+00:00">2026-10-13T02:14:28+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://baotintuc.vn/viet-nam-can-chon-huong-di-phu-hop-trong-phat-trien-cong-nghe-luong-tu-post1393737.html" rel="noopener noreferrer">Việt Nam cần chọn hướng đi phù hợp trong phát triển công nghệ lượng tử</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Tập đoàn Kawasaki của Nhật Bản vừa giới thiệu mẫu robot xã hội hình chú chó nhằm hỗ trợ người cao tuổi tại nhà. Đây được xem là hướng tham khảo hữu ích cho Việt Nam trong bối cảnh xã hội đang già hóa và cần phát triển các ứng dụng trí tuệ nhân tạo (AI) phục vụ đời sống.</p></section>
+  <p class="linkrow"><a class="full" href="https://baotintuc.vn/viet-nam-can-chon-huong-di-phu-hop-trong-phat-trien-cong-nghe-luong-tu-post1393737.html" rel="noopener noreferrer">https://baotintuc.vn/viet-nam-can-chon-huong-di-phu-hop-trong-phat-trien-cong-nghe-luong-tu-post1393737.html</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791857534000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">Báo Tin Tức — Tin mới</span>
+    <time datetime="2026-10-13T02:12:14+00:00">2026-10-13T02:12:14+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://baotintuc.vn/von-vay-chinh-sach-mo-co-hoi-lap-nghiep-cho-nhieu-ban-tre-post1393734.html" rel="noopener noreferrer">Vốn vay chính sách mở cơ hội lập nghiệp cho nhiều bạn trẻ</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Chỉ số Nasdaq Composite tại Mỹ đã giảm điểm trong phiên giao dịch ngày 12/10 do ảnh hưởng từ việc giá dầu tăng sau các cuộc tấn công tại Saudi Arabia. Nhà đầu tư hiện đang thận trọng chờ đợi các số liệu kinh tế và báo cáo lợi nhuận quý III/2026 từ các ngân hàng.</p></section>
+  <p class="linkrow"><a class="full" href="https://baotintuc.vn/von-vay-chinh-sach-mo-co-hoi-lap-nghiep-cho-nhieu-ban-tre-post1393734.html" rel="noopener noreferrer">https://baotintuc.vn/von-vay-chinh-sach-mo-co-hoi-lap-nghiep-cho-nhieu-ban-tre-post1393734.html</a></p>
+</article>
+<article class="card" data-category="thế-giới" data-ts="1791856767000">
+  <header class="card-head">
+    <span class="badge">Thế giới</span>
+    
+    <span class="src">Báo Tin Tức — Tin mới</span>
+    <time datetime="2026-10-13T01:59:27+00:00">2026-10-13T01:59:27+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://baotintuc.vn/bau-cu-my-tong-thong-donald-trump-chay-dua-van-dong-cu-tri-post1393731.html" rel="noopener noreferrer">Bầu cử Mỹ: Tổng thống Donald Trump chạy đua vận động cử tri</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Đại sứ quán Việt Nam tại Ấn Độ đã tổ chức buổi gặp gỡ cộng đồng người Việt đang sinh sống và làm việc tại đây. Sự kiện nhằm nắm bắt tâm tư, nguyện vọng của bà con, đồng thời thảo luận các giải pháp tăng cường kết nối và phát huy vai trò của cộng đồng trong việc thúc đẩy quan hệ hữu nghị giữa hai nước.</p></section>
+  <p class="linkrow"><a class="full" href="https://baotintuc.vn/bau-cu-my-tong-thong-donald-trump-chay-dua-van-dong-cu-tri-post1393731.html" rel="noopener noreferrer">https://baotintuc.vn/bau-cu-my-tong-thong-donald-trump-chay-dua-van-dong-cu-tri-post1393731.html</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791856700000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">Báo Tin Tức — Tin mới</span>
+    <time datetime="2026-10-13T01:58:20+00:00">2026-10-13T01:58:20+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://baotintuc.vn/ty-gia-hom-nay-1310-gia-usd-bat-tang-tro-lai-post1393730.html" rel="noopener noreferrer">Tỷ giá hôm nay 13/10: Giá USD bật tăng trở lại</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Thị trường hàng hóa nguyên liệu thế giới ghi nhận sắc xanh áp đảo trong tuần qua, đẩy chỉ số MXV-Index tăng gần 1,7%. Đáng chú ý, nhóm năng lượng, đặc biệt là dầu diesel, có biến động mạnh với mức tăng giá 8,5%.</p></section>
+  <p class="linkrow"><a class="full" href="https://baotintuc.vn/ty-gia-hom-nay-1310-gia-usd-bat-tang-tro-lai-post1393730.html" rel="noopener noreferrer">https://baotintuc.vn/ty-gia-hom-nay-1310-gia-usd-bat-tang-tro-lai-post1393730.html</a></p>
+</article>
+<article class="card" data-category="pháp-luật" data-ts="1791881760000">
+  <header class="card-head">
+    <span class="badge">Pháp luật</span>
+    
+    <span class="src">Soha</span>
+    <time datetime="2026-10-13T08:56:00+00:00">2026-10-13T08:56:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://soha.vn/cong-an-de-nghi-576-chu-xe-duoi-day-nhanh-chong-nop-phat-nguoi-theo-nghi-dinh-168-198261012071617106.htm" rel="noopener noreferrer">Công an đề nghị 576 chủ xe dưới đây nhanh chóng nộp phạt nguội theo Nghị định 168</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Phòng Cảnh sát giao thông Công an TP Bắc Ninh vừa thông báo danh sách 576 trường hợp vi phạm tốc độ được ghi nhận qua hệ thống giám sát từ ngày 28/9 đến 4/10/2026. Cơ quan chức năng đề nghị các chủ phương tiện chủ động tra cứu và chấp hành nộp phạt theo quy định.</p></section>
+  <p class="linkrow"><a class="full" href="https://soha.vn/cong-an-de-nghi-576-chu-xe-duoi-day-nhanh-chong-nop-phat-nguoi-theo-nghi-dinh-168-198261012071617106.htm" rel="noopener noreferrer">https://soha.vn/cong-an-de-nghi-576-chu-xe-duoi-day-nhanh-chong-nop-phat-nguoi-theo-nghi-dinh-168-198261012071617106.htm</a></p>
+</article>
+<article class="card" data-category="pháp-luật" data-ts="1791877800000">
+  <header class="card-head">
+    <span class="badge">Pháp luật</span>
+    
+    <span class="src">Soha</span>
+    <time datetime="2026-10-13T07:50:00+00:00">2026-10-13T07:50:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://soha.vn/tat-ca-nguoi-dan-co-dat-dai-chu-y-quy-dinh-moi-nhat-tu-15-10-198261012184143074.htm" rel="noopener noreferrer">Tất cả người dân có đất đai chú ý quy định mới nhất từ 15/10</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Hội đồng Thẩm phán Tòa án nhân dân tối cao ban hành Nghị quyết 04/2026/NQ-HĐTP, có hiệu lực từ 15/10/2026, quy định về việc giảm nhẹ hình phạt cho các cá nhân vi phạm pháp luật đất đai dựa trên mức độ chủ động khắc phục hậu quả. Nghị quyết đưa ra 4 mức giảm án cụ thể tương ứng với tỷ lệ thiệt hại kinh tế đã được bồi thường.</p></section>
+  <p class="linkrow"><a class="full" href="https://soha.vn/tat-ca-nguoi-dan-co-dat-dai-chu-y-quy-dinh-moi-nhat-tu-15-10-198261012184143074.htm" rel="noopener noreferrer">https://soha.vn/tat-ca-nguoi-dan-co-dat-dai-chu-y-quy-dinh-moi-nhat-tu-15-10-198261012184143074.htm</a></p>
+</article>
+<article class="card" data-category="môi-trường" data-ts="1791876180000">
+  <header class="card-head">
+    <span class="badge">Môi trường</span>
+    
+    <span class="src">Soha</span>
+    <time datetime="2026-10-13T07:23:00+00:00">2026-10-13T07:23:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://soha.vn/mien-trung-lai-don-mua-lon-keo-dai-198261013064854258.htm" rel="noopener noreferrer">Miền Trung lại đón mưa lớn kéo dài</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Khu vực từ Quảng Trị đến Đà Nẵng và các tỉnh duyên hải Nam Trung Bộ tiếp tục đón mưa lớn diện rộng trong ngày 13/10, với lượng mưa cục bộ có nơi trên 80mm. Trong khi đó, miền Bắc duy trì thời tiết nắng, ít mưa, nhưng chất lượng không khí tại nhiều địa phương đang ở ngưỡng kém, gây hại cho sức khỏe.</p></section>
+  <p class="linkrow"><a class="full" href="https://soha.vn/mien-trung-lai-don-mua-lon-keo-dai-198261013064854258.htm" rel="noopener noreferrer">https://soha.vn/mien-trung-lai-don-mua-lon-keo-dai-198261013064854258.htm</a></p>
+</article>
+<article class="card" data-category="đời-sống" data-ts="1791873720000">
+  <header class="card-head">
+    <span class="badge">Đời sống</span>
+    
+    <span class="src">Soha</span>
+    <time datetime="2026-10-13T06:42:00+00:00">2026-10-13T06:42:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://soha.vn/ha-noi-tinh-dua-gan-300-ho-dan-ra-khoi-quy-hoach-cong-vien-vo-thi-sau-198261013064544428.htm" rel="noopener noreferrer">Hà Nội tính đưa gần 300 hộ dân ra khỏi quy hoạch công viên Võ Thị Sáu</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>UBND phường Bạch Mai (Hà Nội) đang lấy ý kiến về việc điều chỉnh quy hoạch chi tiết 1/500 công viên Võ Thị Sáu. Nếu được phê duyệt, gần 300 hộ dân tại khu vực này có thể được chuyển đổi chức năng sử dụng đất và cải tạo nhà ở, giúp giải quyết các bất cập trong quản lý đất đai tại địa phương.</p></section>
+  <p class="linkrow"><a class="full" href="https://soha.vn/ha-noi-tinh-dua-gan-300-ho-dan-ra-khoi-quy-hoach-cong-vien-vo-thi-sau-198261013064544428.htm" rel="noopener noreferrer">https://soha.vn/ha-noi-tinh-dua-gan-300-ho-dan-ra-khoi-quy-hoach-cong-vien-vo-thi-sau-198261013064544428.htm</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791831420000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">Soha</span>
+    <time datetime="2026-10-12T18:57:00+00:00">2026-10-12T18:57:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://soha.vn/tat-ca-nguoi-dan-co-tai-khoan-ngan-hang-chu-y-giao-dich-chuyen-tien-nhan-tien-co-the-bi-tam-dung-198261012152115876.htm" rel="noopener noreferrer">Tất cả người dân có tài khoản ngân hàng chú ý giao dịch chuyển tiền, nhận tiền có thể bị tạm dừng</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Người dân cần lưu ý quy định về việc tạm dừng giao dịch ngân hàng nếu giấy tờ tùy thân hết hạn. Đặc biệt, những người sinh năm 1967, 1987 và 2002 cần kiểm tra thời hạn trên thẻ căn cước để chủ động làm thủ tục cấp đổi trước năm 2027, tránh bị khóa tài khoản theo quy định của Ngân hàng Nhà nước.</p></section>
+  <p class="linkrow"><a class="full" href="https://soha.vn/tat-ca-nguoi-dan-co-tai-khoan-ngan-hang-chu-y-giao-dich-chuyen-tien-nhan-tien-co-the-bi-tam-dung-198261012152115876.htm" rel="noopener noreferrer">https://soha.vn/tat-ca-nguoi-dan-co-tai-khoan-ngan-hang-chu-y-giao-dich-chuyen-tien-nhan-tien-co-the-bi-tam-dung-198261012152115876.htm</a></p>
+</article>
+<article class="card" data-category="công-nghệ" data-ts="1791858068000">
+  <header class="card-head">
+    <span class="badge">Công nghệ</span>
+    
+    <span class="src">TinhTe</span>
+    <time datetime="2026-10-13T02:21:08+00:00">2026-10-13T02:21:08+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tinhte.vn/thread/apple-tv-4k-moi-co-the-duoc-nang-cap-manh.4183675/" rel="noopener noreferrer">Apple TV 4K mới có thể được nâng cấp mạnh</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Apple được cho là đang phát triển thế hệ Apple TV 4K mới với nhiều nâng cấp mạnh mẽ về cấu hình như chip A19, RAM 8GB và hỗ trợ Wi-Fi 7. Thiết bị tập trung vào khả năng chơi game và tích hợp Siri AI, cùng với dự đoán về một chiếc remote mới có loa và khả năng ra mắt tay cầm chơi game thương hiệu Beats.</p></section>
+  <p class="linkrow"><a class="full" href="https://tinhte.vn/thread/apple-tv-4k-moi-co-the-duoc-nang-cap-manh.4183675/" rel="noopener noreferrer">https://tinhte.vn/thread/apple-tv-4k-moi-co-the-duoc-nang-cap-manh.4183675/</a></p>
+</article>
+<article class="card" data-category="công-nghệ" data-ts="1791855749000">
+  <header class="card-head">
+    <span class="badge">Công nghệ</span>
+    
+    <span class="src">TinhTe</span>
+    <time datetime="2026-10-13T01:42:29+00:00">2026-10-13T01:42:29+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tinhte.vn/thread/muon-dung-tinh-nang-ai-tom-tat-video-camera-cua-apple-home-tren-ios-27-tra-them-icloud-tu-9-99.4183679/" rel="noopener noreferrer">Muốn dùng tính năng AI tóm tắt video camera của Apple Home trên iOS 27: trả thêm iCloud+ từ 9,99...</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Apple dự kiến ra mắt tính năng tóm tắt video bằng AI cho camera an ninh trên iOS 27, giúp nhận diện khuôn mặt và gộp các sự kiện ghi hình. Tuy nhiên, người dùng sẽ cần đăng ký các gói iCloud+ với mức phí tăng dần tùy theo số lượng camera sử dụng, thay vì sử dụng gói dung lượng cũ.</p></section>
+  <p class="linkrow"><a class="full" href="https://tinhte.vn/thread/muon-dung-tinh-nang-ai-tom-tat-video-camera-cua-apple-home-tren-ios-27-tra-them-icloud-tu-9-99.4183679/" rel="noopener noreferrer">https://tinhte.vn/thread/muon-dung-tinh-nang-ai-tom-tat-video-camera-cua-apple-home-tren-ios-27-tra-them-icloud-tu-9-99.4183679/</a></p>
+</article>
+<article class="card" data-category="công-nghệ" data-ts="1791850176000">
+  <header class="card-head">
+    <span class="badge">Công nghệ</span>
+    
+    <span class="src">TinhTe</span>
+    <time datetime="2026-10-13T00:09:36+00:00">2026-10-13T00:09:36+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tinhte.vn/thread/google-ra-mat-fitbit-edge-ban-nang-cap-cua-charge-6-tich-hop-gps-cam-bien-do-cao-gia-179-usd.4183658/" rel="noopener noreferrer">Google ra mắt Fitbit Edge: bản nâng cấp của Charge 6, tích hợp GPS, cảm biến độ cao, giá 179 USD</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Google vừa ra mắt Fitbit Edge, phiên bản nâng cấp của Charge 6 với mức giá 179,99 USD, sở hữu màn hình AMOLED, GPS độc lập và cảm biến đo độ cao. Thiết bị được trang bị nhiều tính năng theo dõi sức khỏe và vận động, hỗ trợ cả Android lẫn iOS, với thời lượng pin lên đến 7 ngày.</p></section>
+  <p class="linkrow"><a class="full" href="https://tinhte.vn/thread/google-ra-mat-fitbit-edge-ban-nang-cap-cua-charge-6-tich-hop-gps-cam-bien-do-cao-gia-179-usd.4183658/" rel="noopener noreferrer">https://tinhte.vn/thread/google-ra-mat-fitbit-edge-ban-nang-cap-cua-charge-6-tich-hop-gps-cam-bien-do-cao-gia-179-usd.4183658/</a></p>
+</article>
+<article class="card" data-category="công-nghệ" data-ts="1791846464000">
+  <header class="card-head">
+    <span class="badge">Công nghệ</span>
+    
+    <span class="src">TinhTe</span>
+    <time datetime="2026-10-12T23:07:44+00:00">2026-10-12T23:07:44+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tinhte.vn/thread/homepod-mini-moi-sap-ra-giu-nguyen-dang-nang-chip-s10-va-co-siri-ai.4183674/" rel="noopener noreferrer">HomePod mini mới sắp ra: Giữ nguyên dáng, nâng chip S10 và có Siri AI</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Apple sắp ra mắt phiên bản HomePod mini mới với thiết kế không đổi nhưng được nâng cấp cấu hình bên trong gồm chip S10, Wi-Fi 7 và chip UWB đời hai. Điểm nhấn đáng chú ý là sự tích hợp Siri AI thông minh hơn, có khả năng hiểu ngữ cảnh và trả lời nối tiếp.</p></section>
+  <p class="linkrow"><a class="full" href="https://tinhte.vn/thread/homepod-mini-moi-sap-ra-giu-nguyen-dang-nang-chip-s10-va-co-siri-ai.4183674/" rel="noopener noreferrer">https://tinhte.vn/thread/homepod-mini-moi-sap-ra-giu-nguyen-dang-nang-chip-s10-va-co-siri-ai.4183674/</a></p>
+</article>
+<article class="card" data-category="công-nghệ" data-ts="1791819822000">
+  <header class="card-head">
+    <span class="badge">Công nghệ</span>
+    
+    <span class="src">TinhTe</span>
+    <time datetime="2026-10-12T15:43:42+00:00">2026-10-12T15:43:42+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tinhte.vn/thread/smartphone-q3-2026-samsung-dan-dau-voi-23-nho-z-fold8-toan-cau-giam-20.4183656/" rel="noopener noreferrer">Smartphone Q3/2026: Samsung dẫn đầu với 23% nhờ Z Fold8, toàn cầu giảm 20%</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Thị trường smartphone toàn cầu quý 3/2026 giảm 20% do thiếu hụt linh kiện bộ nhớ và giá thành tăng cao. Trong bối cảnh đó, Samsung dẫn đầu thị phần với 23% nhờ dòng Galaxy Z Fold8, trong khi Apple đạt 22% và các hãng Trung Quốc như Xiaomi, OPPO, vivo đều ghi nhận mức sụt giảm đáng kể.</p></section>
+  <p class="linkrow"><a class="full" href="https://tinhte.vn/thread/smartphone-q3-2026-samsung-dan-dau-voi-23-nho-z-fold8-toan-cau-giam-20.4183656/" rel="noopener noreferrer">https://tinhte.vn/thread/smartphone-q3-2026-samsung-dan-dau-voi-23-nho-z-fold8-toan-cau-giam-20.4183656/</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791852473000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">VNBusiness</span>
+    <time datetime="2026-10-13T00:47:53+00:00">2026-10-13T00:47:53+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://vnbusiness.vn//ca-phe-trong-nuoc-giu-gia-cao-ky-vong-vuot-moc-93000-dongkg.html" rel="noopener noreferrer">Cà phê trong nước giữ giá cao, kỳ vọng vượt mốc 93.000 đồng/kg</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Giá cà phê nhân xô trong nước tiếp tục duy trì ở mức cao, trung bình 93.000 đồng/kg tại các vùng trọng điểm Tây Nguyên. Sự phục hồi của giá cà phê trên các sàn giao dịch quốc tế như London và New York đang tạo đà kỳ vọng giá trong nước sẽ tiếp tục tăng nhẹ trong thời gian tới.</p></section>
+  <p class="linkrow"><a class="full" href="https://vnbusiness.vn//ca-phe-trong-nuoc-giu-gia-cao-ky-vong-vuot-moc-93000-dongkg.html" rel="noopener noreferrer">https://vnbusiness.vn//ca-phe-trong-nuoc-giu-gia-cao-ky-vong-vuot-moc-93000-dongkg.html</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791852451000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">VNBusiness</span>
+    <time datetime="2026-10-13T00:47:31+00:00">2026-10-13T00:47:31+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://vnbusiness.vn//vang-trong-nuoc-dong-loat-giam-vang-nhan-mat-toi-800000-dongluong.html" rel="noopener noreferrer">Vàng trong nước đồng loạt giảm, vàng nhẫn mất tới 800.000 đồng/lượng</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Giá vàng trong nước đồng loạt giảm mạnh theo xu hướng thế giới, với vàng nhẫn giảm tới 800.000 đồng/lượng. Các nhà đầu tư hiện đang thận trọng chờ đợi các dữ liệu lạm phát từ Mỹ để đánh giá triển vọng chính sách lãi suất, trong khi giới chuyên môn khuyến nghị người dân nên quản trị vốn cẩn trọng.</p></section>
+  <p class="linkrow"><a class="full" href="https://vnbusiness.vn//vang-trong-nuoc-dong-loat-giam-vang-nhan-mat-toi-800000-dongluong.html" rel="noopener noreferrer">https://vnbusiness.vn//vang-trong-nuoc-dong-loat-giam-vang-nhan-mat-toi-800000-dongluong.html</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791852430000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">VNBusiness</span>
+    <time datetime="2026-10-13T00:47:10+00:00">2026-10-13T00:47:10+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://vnbusiness.vn//cuoc-dua-gianh-nguoi-mua-doanh-nghiep-phai-bat-dung-mach-tieu-dung.html" rel="noopener noreferrer">Cuộc đua giành người mua: Doanh nghiệp phải bắt ‘đúng mạch’ tiêu dùng</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Trong mùa mua sắm cuối năm, các doanh nghiệp bán lẻ đang đối mặt với áp lực cạnh tranh gay gắt và sự thay đổi trong hành vi tiêu dùng khi khách hàng ngày càng sử dụng AI để so sánh giá. Để giữ chân người mua, doanh nghiệp cần tập trung vào chất lượng, trải nghiệm thực tế và minh bạch thông tin thay vì chỉ dựa vào các chương trình giảm giá ngắn hạn.</p></section>
+  <p class="linkrow"><a class="full" href="https://vnbusiness.vn//cuoc-dua-gianh-nguoi-mua-doanh-nghiep-phai-bat-dung-mach-tieu-dung.html" rel="noopener noreferrer">https://vnbusiness.vn//cuoc-dua-gianh-nguoi-mua-doanh-nghiep-phai-bat-dung-mach-tieu-dung.html</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791852407000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">VNBusiness</span>
+    <time datetime="2026-10-13T00:46:47+00:00">2026-10-13T00:46:47+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://vnbusiness.vn//go-diem-nghen-cong-nghe-mo-duong-cho-nong-nghiep-viet-but-pha.html" rel="noopener noreferrer">Gỡ điểm nghẽn công nghệ, mở đường cho nông nghiệp Việt bứt phá</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Doanh nghiệp nông nghiệp Việt Nam đang đối mặt với nhiều thách thức về công nghệ, nhân lực và hạ tầng nghiên cứu khi cạnh tranh với các tập đoàn quốc tế. Chủ tịch HĐQT Tập đoàn ThaiBinh Seed nhấn mạnh cần có sự đồng bộ về thể chế, đầu tư cho khoa học công nghệ và đào tạo nhân lực để nông nghiệp có thể phát triển bền vững.</p></section>
+  <p class="linkrow"><a class="full" href="https://vnbusiness.vn//go-diem-nghen-cong-nghe-mo-duong-cho-nong-nghiep-viet-but-pha.html" rel="noopener noreferrer">https://vnbusiness.vn//go-diem-nghen-cong-nghe-mo-duong-cho-nong-nghiep-viet-but-pha.html</a></p>
+</article>
+<article class="card" data-category="đời-sống" data-ts="1791858091000">
+  <header class="card-head">
+    <span class="badge">Đời sống</span>
+    
+    <span class="src">TienPhong</span>
+    <time datetime="2026-10-13T02:21:31+00:00">2026-10-13T02:21:31+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tienphong.vn/doanh-nhan-dang-hong-anh-mo-loi-de-doanh-nghiep-viet-lon-manh-post1884627.tpo" rel="noopener noreferrer">Doanh nhân Đặng Hồng Anh: Mở lối để doanh nghiệp Việt lớn mạnh</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Bài viết chia sẻ góc nhìn của doanh nhân Đặng Hồng Anh về khát vọng xây dựng tổ ấm và sự phát triển của doanh nghiệp. Nội dung tập trung vào cảm xúc cá nhân và những trải nghiệm trong quá trình xây dựng sự nghiệp.</p></section>
+  <p class="linkrow"><a class="full" href="https://tienphong.vn/doanh-nhan-dang-hong-anh-mo-loi-de-doanh-nghiep-viet-lon-manh-post1884627.tpo" rel="noopener noreferrer">https://tienphong.vn/doanh-nhan-dang-hong-anh-mo-loi-de-doanh-nghiep-viet-lon-manh-post1884627.tpo</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791858058000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">TienPhong</span>
+    <time datetime="2026-10-13T02:20:58+00:00">2026-10-13T02:20:58+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tienphong.vn/chu-nhiem-uy-ban-kinh-te-va-tai-chinh-phan-van-mai-xay-niem-tin-bang-hanh-dong-post1883029.tpo" rel="noopener noreferrer">Chủ nhiệm Ủy ban Kinh tế và Tài chính Phan Văn Mãi: Xây niềm tin bằng hành động</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Chủ nhiệm Ủy ban Kinh tế và Tài chính Phan Văn Mãi nhấn mạnh tầm quan trọng của việc phát triển lực lượng doanh nghiệp trong nước để xây dựng nền kinh tế tự chủ. Mục tiêu hiện nay là hình thành đội ngũ doanh nghiệp dân tộc có năng lực cạnh tranh và gắn bó với sự phát triển của đất nước.</p></section>
+  <p class="linkrow"><a class="full" href="https://tienphong.vn/chu-nhiem-uy-ban-kinh-te-va-tai-chinh-phan-van-mai-xay-niem-tin-bang-hanh-dong-post1883029.tpo" rel="noopener noreferrer">https://tienphong.vn/chu-nhiem-uy-ban-kinh-te-va-tai-chinh-phan-van-mai-xay-niem-tin-bang-hanh-dong-post1883029.tpo</a></p>
+</article>
+<article class="card" data-category="thời-sự" data-ts="1791857894000">
+  <header class="card-head">
+    <span class="badge">Thời sự</span>
+    
+    <span class="src">TienPhong</span>
+    <time datetime="2026-10-13T02:18:14+00:00">2026-10-13T02:18:14+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tienphong.vn/a-rap-xe-ut-dieu-tra-nguyen-nhan-thung-luoi-phong-khong-vi-houthi-post1884706.tpo" rel="noopener noreferrer">Ả-rập Xê-út điều tra nguyên nhân thủng lưới phòng không vì Houthi</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Tiêu đề bài viết đề cập đến việc Ả-rập Xê-út điều tra nguyên nhân thủng lưới phòng không trước Houthi, tuy nhiên nội dung văn bản cung cấp lại nói về việc lực lượng quân sự hỗ trợ người dân khắc phục hậu quả mưa ngập tại Đồng Nai. Do thông tin không nhất quán, cần thận trọng khi xác định nội dung chính.</p></section>
+  <p class="linkrow"><a class="full" href="https://tienphong.vn/a-rap-xe-ut-dieu-tra-nguyen-nhan-thung-luoi-phong-khong-vi-houthi-post1884706.tpo" rel="noopener noreferrer">https://tienphong.vn/a-rap-xe-ut-dieu-tra-nguyen-nhan-thung-luoi-phong-khong-vi-houthi-post1884706.tpo</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791857407000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">TienPhong</span>
+    <time datetime="2026-10-13T02:10:07+00:00">2026-10-13T02:10:07+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tienphong.vn/vietinbank-ra-mat-san-pham-vay-thau-chi-bao-dam-bang-tien-gui-truc-tuyen-post1884721.tpo" rel="noopener noreferrer">VietinBank ra mắt sản phẩm vay thấu chi bảo đảm bằng tiền gửi trực tuyến</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Nội dung văn bản cung cấp không liên quan đến tiêu đề về sản phẩm vay của VietinBank mà đề cập đến phát biểu của ông Đoàn Nguyên Đức về chữ tín trong kinh doanh. Do thông tin không khớp, không thể tóm tắt nội dung về sản phẩm vay.</p></section>
+  <p class="linkrow"><a class="full" href="https://tienphong.vn/vietinbank-ra-mat-san-pham-vay-thau-chi-bao-dam-bang-tien-gui-truc-tuyen-post1884721.tpo" rel="noopener noreferrer">https://tienphong.vn/vietinbank-ra-mat-san-pham-vay-thau-chi-bao-dam-bang-tien-gui-truc-tuyen-post1884721.tpo</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791857310000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">TienPhong</span>
+    <time datetime="2026-10-13T02:08:30+00:00">2026-10-13T02:08:30+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://tienphong.vn/chu-tich-ttc-energy-dang-huynh-anh-tuan-duoc-vinh-danh-doanh-nhan-viet-nam-tieu-bieu-cup-thanh-giong-2026-post1884607.tpo" rel="noopener noreferrer">Chủ tịch TTC Energy Đặng Huỳnh Anh Tuấn được vinh danh Doanh nhân Việt Nam tiêu biểu - Cúp Thánh Gióng 2026</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Nội dung văn bản cung cấp không liên quan đến tiêu đề về việc vinh danh ông Đặng Huỳnh Anh Tuấn mà đề cập đến phát biểu của ông Đoàn Nguyên Đức về chữ tín trong kinh doanh. Do thông tin không khớp, không thể tóm tắt nội dung về sự kiện vinh danh.</p></section>
+  <p class="linkrow"><a class="full" href="https://tienphong.vn/chu-tich-ttc-energy-dang-huynh-anh-tuan-duoc-vinh-danh-doanh-nhan-viet-nam-tieu-bieu-cup-thanh-giong-2026-post1884607.tpo" rel="noopener noreferrer">https://tienphong.vn/chu-tich-ttc-energy-dang-huynh-anh-tuan-duoc-vinh-danh-doanh-nhan-viet-nam-tieu-bieu-cup-thanh-giong-2026-post1884607.tpo</a></p>
+</article>
+<article class="card" data-category="công-nghệ" data-ts="1791882600000">
+  <header class="card-head">
+    <span class="badge">Công nghệ</span>
+    
+    <span class="src">GenK</span>
+    <time datetime="2026-10-13T09:10:00+00:00">2026-10-13T09:10:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://genk.vn/thong-bao-toi-nguoi-dung-iphone-18-pro-max-dung-tinh-nang-co-san-nay-anh-chup-se-xau-di-165261013040635117.chn" rel="noopener noreferrer">Thông báo tới người dùng iPhone 18 Pro Max: Dùng tính năng có sẵn này, ảnh chụp sẽ xấu đi</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Người dùng iPhone 18 Pro Max được khuyến cáo nên thận trọng khi tự chỉnh tốc độ màn trập thủ công vì tính năng này có thể làm ảnh giảm chất lượng, tăng độ nhiễu và làm mất khả năng chụp đêm. Chế độ tự động vẫn được đánh giá là lựa chọn tối ưu hơn cho người dùng thông thường để đảm bảo ảnh sáng rõ và ít nhiễu.</p></section>
+  <p class="linkrow"><a class="full" href="https://genk.vn/thong-bao-toi-nguoi-dung-iphone-18-pro-max-dung-tinh-nang-co-san-nay-anh-chup-se-xau-di-165261013040635117.chn" rel="noopener noreferrer">https://genk.vn/thong-bao-toi-nguoi-dung-iphone-18-pro-max-dung-tinh-nang-co-san-nay-anh-chup-se-xau-di-165261013040635117.chn</a></p>
+</article>
+<article class="card" data-category="công-nghệ" data-ts="1791880740000">
+  <header class="card-head">
+    <span class="badge">Công nghệ</span>
+    
+    <span class="src">GenK</span>
+    <time datetime="2026-10-13T08:39:00+00:00">2026-10-13T08:39:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://genk.vn/phat-minh-moi-cua-nga-lam-rung-chuyen-nganh-vat-lieu-tao-ra-kim-loai-tu-phuc-hoi-tu-va-vet-nut-giam-chi-phi-sua-chua-va-thay-the-165261013082413986.chn" rel="noopener noreferrer">Phát minh mới của Nga làm rung chuyển ngành vật liệu: tạo ra kim loại tự phục hồi, tự vá vết nứt, giảm chi phí sửa chữa và thay thế</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Các nhà khoa học Nga đang nghiên cứu loại hợp kim entropy cao có khả năng tự phục hồi vết nứt thông qua cơ chế gia nhiệt, giúp lấp đầy các khuyết tật nhỏ. Công nghệ này hứa hẹn kéo dài tuổi thọ máy móc công nghiệp, dù hiện tại vẫn đang trong giai đoạn thử nghiệm phòng thí nghiệm.</p></section>
+  <p class="linkrow"><a class="full" href="https://genk.vn/phat-minh-moi-cua-nga-lam-rung-chuyen-nganh-vat-lieu-tao-ra-kim-loai-tu-phuc-hoi-tu-va-vet-nut-giam-chi-phi-sua-chua-va-thay-the-165261013082413986.chn" rel="noopener noreferrer">https://genk.vn/phat-minh-moi-cua-nga-lam-rung-chuyen-nganh-vat-lieu-tao-ra-kim-loai-tu-phuc-hoi-tu-va-vet-nut-giam-chi-phi-sua-chua-va-thay-the-165261013082413986.chn</a></p>
+</article>
+<article class="card" data-category="công-nghệ" data-ts="1791879780000">
+  <header class="card-head">
+    <span class="badge">Công nghệ</span>
+    
+    <span class="src">GenK</span>
+    <time datetime="2026-10-13T08:23:00+00:00">2026-10-13T08:23:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://genk.vn/ngam-can-canh-iphone-duo-truoc-ngay-mo-ban-tai-viet-nam-165261013082320609.chn" rel="noopener noreferrer">Ngắm cận cảnh iPhone Duo trước ngày mở bán tại Việt Nam</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Apple chính thức gia nhập thị trường smartphone gập với iPhone Duo, nổi bật với màn hình gần như không lộ nếp gấp và sử dụng lớp phủ nano-texture. Sản phẩm có giá khởi điểm từ 1.999 USD (tại Việt Nam từ 64,9 triệu đồng) và dự kiến mở bán vào ngày 23/10.</p></section>
+  <p class="linkrow"><a class="full" href="https://genk.vn/ngam-can-canh-iphone-duo-truoc-ngay-mo-ban-tai-viet-nam-165261013082320609.chn" rel="noopener noreferrer">https://genk.vn/ngam-can-canh-iphone-duo-truoc-ngay-mo-ban-tai-viet-nam-165261013082320609.chn</a></p>
+</article>
+<article class="card" data-category="thế-giới" data-ts="1791878880000">
+  <header class="card-head">
+    <span class="badge">Thế giới</span>
+    
+    <span class="src">GenK</span>
+    <time datetime="2026-10-13T08:08:00+00:00">2026-10-13T08:08:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://genk.vn/bill-gates-toi-dong-thue-nhieu-hon-bat-cu-ai-10-ty-do-toi-cung-san-sang-165261013081544037.chn" rel="noopener noreferrer">Bill Gates: Tôi đóng thuế nhiều hơn bất cứ ai, 10 tỷ đô tôi cũng sẵn sàng</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Tỷ phú Bill Gates từng chia sẻ quan điểm về việc đóng thuế cao đối với người giàu và khẳng định đã nộp hơn 10 tỷ USD tiền thuế. Hiện tại, ông đang tập trung vào kế hoạch chi 200 tỷ USD thông qua Quỹ Gates trong 20 năm tới và cam kết giảm 99% tài sản cá nhân trước khi quỹ đóng cửa.</p></section>
+  <p class="linkrow"><a class="full" href="https://genk.vn/bill-gates-toi-dong-thue-nhieu-hon-bat-cu-ai-10-ty-do-toi-cung-san-sang-165261013081544037.chn" rel="noopener noreferrer">https://genk.vn/bill-gates-toi-dong-thue-nhieu-hon-bat-cu-ai-10-ty-do-toi-cung-san-sang-165261013081544037.chn</a></p>
+</article>
+<article class="card" data-category="công-nghệ" data-ts="1791860940000">
+  <header class="card-head">
+    <span class="badge">Công nghệ</span>
+    
+    <span class="src">GenK</span>
+    <time datetime="2026-10-13T03:09:00+00:00">2026-10-13T03:09:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://genk.vn/google-vua-ra-mat-smartband-trong-cuc-cute-nhung-gia-thi-khong-165261013031653388.chn" rel="noopener noreferrer">Google vừa ra mắt smartband trông cực cute, nhưng giá thì không!</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Google vừa ra mắt vòng đeo sức khỏe Fitbit Edge với màn hình AMOLED 1,34 inch, GPS độc lập và nhiều tính năng theo dõi sức khỏe, có giá khởi điểm 179,99 USD. Tuy nhiên, thiết bị này đã lược bỏ một số tính năng như NFC và cảm biến đo stress so với các thế hệ trước.</p></section>
+  <p class="linkrow"><a class="full" href="https://genk.vn/google-vua-ra-mat-smartband-trong-cuc-cute-nhung-gia-thi-khong-165261013031653388.chn" rel="noopener noreferrer">https://genk.vn/google-vua-ra-mat-smartband-trong-cuc-cute-nhung-gia-thi-khong-165261013031653388.chn</a></p>
+</article>
+<article class="card" data-category="pháp-luật" data-ts="1791856607000">
+  <header class="card-head">
+    <span class="badge">Pháp luật</span>
+    
+    <span class="src">VietnamNet</span>
+    <time datetime="2026-10-13T01:56:47+00:00">2026-10-13T01:56:47+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://vietnamnet.vn/tai-xe-tong-tu-vong-nu-sinh-o-vinh-long-di-khap-khieng-tai-toa-sang-13-10-2564162.html" rel="noopener noreferrer">Tài xế tông tử vong nữ sinh ở Vĩnh Long đi khập khiễng tại tòa sáng 13/10</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Tài xế Nguyễn Văn Bảo Trung, người gây tai nạn khiến một nữ sinh tử vong tại Vĩnh Long, đã xuất hiện tại tòa với tình trạng sức khỏe suy giảm do bị cha nạn nhân bắn trước đó. Vụ án từng bị tạm đình chỉ do bị cáo mắc bệnh tâm thần sau chấn thương não, nhưng hiện đã có kết luận giám định mới.</p></section>
+  <p class="linkrow"><a class="full" href="https://vietnamnet.vn/tai-xe-tong-tu-vong-nu-sinh-o-vinh-long-di-khap-khieng-tai-toa-sang-13-10-2564162.html" rel="noopener noreferrer">https://vietnamnet.vn/tai-xe-tong-tu-vong-nu-sinh-o-vinh-long-di-khap-khieng-tai-toa-sang-13-10-2564162.html</a></p>
+</article>
+<article class="card" data-category="thời-sự" data-ts="1791853296000">
+  <header class="card-head">
+    <span class="badge">Thời sự</span>
+    
+    <span class="src">VietnamNet</span>
+    <time datetime="2026-10-13T01:01:36+00:00">2026-10-13T01:01:36+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://vietnamnet.vn/ben-trong-doan-tau-chat-luong-cao-sai-gon-nha-trang-vua-ra-mat-co-gi-dac-biet-2564187.html" rel="noopener noreferrer">Bên trong đoàn tàu chất lượng cao Sài Gòn - Nha Trang vừa ra mắt có gì đặc biệt?</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Nội dung văn bản không đề cập đến đoàn tàu chất lượng cao Sài Gòn - Nha Trang như tiêu đề, mà nói về việc Bộ Xây dựng yêu cầu bảo vệ tháp Chăm hơn 1.000 năm tuổi khi triển khai dự án đường sắt tốc độ cao Bắc - Nam.</p></section>
+  <p class="linkrow"><a class="full" href="https://vietnamnet.vn/ben-trong-doan-tau-chat-luong-cao-sai-gon-nha-trang-vua-ra-mat-co-gi-dac-biet-2564187.html" rel="noopener noreferrer">https://vietnamnet.vn/ben-trong-doan-tau-chat-luong-cao-sai-gon-nha-trang-vua-ra-mat-co-gi-dac-biet-2564187.html</a></p>
+</article>
+<article class="card" data-category="thời-sự" data-ts="1791848700000">
+  <header class="card-head">
+    <span class="badge">Thời sự</span>
+    
+    <span class="src">VietnamNet</span>
+    <time datetime="2026-10-12T23:45:00+00:00">2026-10-12T23:45:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://vietnamnet.vn/dien-mao-moi-cua-tuyen-duong-1-000-ty-dong-o-tphcm-sau-di-doi-loat-tru-dien-2563050.html" rel="noopener noreferrer">Diện mạo mới của tuyến đường 1.000 tỷ đồng ở TPHCM sau di dời loạt trụ điện</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Dự án mở rộng đường Chu Văn An (TP.HCM) với tổng vốn hơn 1.000 tỷ đồng đang được đẩy nhanh tiến độ sau khi hoàn tất di dời các trụ điện cũ. Tuyến đường dự kiến mở rộng từ 7m lên 23m, giúp cải thiện giao thông và hạ tầng khu vực.</p></section>
+  <p class="linkrow"><a class="full" href="https://vietnamnet.vn/dien-mao-moi-cua-tuyen-duong-1-000-ty-dong-o-tphcm-sau-di-doi-loat-tru-dien-2563050.html" rel="noopener noreferrer">https://vietnamnet.vn/dien-mao-moi-cua-tuyen-duong-1-000-ty-dong-o-tphcm-sau-di-doi-loat-tru-dien-2563050.html</a></p>
+</article>
+<article class="card" data-category="thời-sự" data-ts="1791847776000">
+  <header class="card-head">
+    <span class="badge">Thời sự</span>
+    
+    <span class="src">VietnamNet</span>
+    <time datetime="2026-10-12T23:29:36+00:00">2026-10-12T23:29:36+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://vietnamnet.vn/du-bao-thoi-tiet-13-10-2026-nang-hanh-kho-khap-mien-bac-nam-bo-mua-bat-chot-2555471.html" rel="noopener noreferrer">Dự báo thời tiết 13/10/2026: Nắng hanh khô khắp miền Bắc, Nam Bộ mưa bất chợt</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Thời tiết ngày 13/10/2026 dự báo miền Bắc có nắng hanh khô, trong khi Nam Bộ có mưa bất chợt. Ngoài ra, TP.HCM đang đối mặt với tình trạng ngập úng, kẹt xe và đặt mục tiêu xử lý 50 vị trí ngập trong giai đoạn 2026-2030.</p></section>
+  <p class="linkrow"><a class="full" href="https://vietnamnet.vn/du-bao-thoi-tiet-13-10-2026-nang-hanh-kho-khap-mien-bac-nam-bo-mua-bat-chot-2555471.html" rel="noopener noreferrer">https://vietnamnet.vn/du-bao-thoi-tiet-13-10-2026-nang-hanh-kho-khap-mien-bac-nam-bo-mua-bat-chot-2555471.html</a></p>
+</article>
+<article class="card" data-category="thời-sự" data-ts="1791846900000">
+  <header class="card-head">
+    <span class="badge">Thời sự</span>
+    
+    <span class="src">VietnamNet</span>
+    <time datetime="2026-10-12T23:15:00+00:00">2026-10-12T23:15:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://vietnamnet.vn/thoi-su-sang-13-10-truy-to-shark-thuy-lua-dao-hon-8-459-ty-dong-2563916.html" rel="noopener noreferrer">Thời sự sáng 13/10: Truy tố Shark Thủy lừa đảo hơn 8.459 tỷ đồng</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>VKSND Tối cao đã truy tố ông Nguyễn Ngọc Thủy (Shark Thủy) về tội lừa đảo chiếm đoạt hơn 8.459 tỷ đồng của hơn 10.000 nhà đầu tư. Bên cạnh đó, bản tin còn đề cập đến vụ xô xát giao thông tại Hà Nội và vụ cháy cửa hàng xe máy tại An Giang.</p></section>
+  <p class="linkrow"><a class="full" href="https://vietnamnet.vn/thoi-su-sang-13-10-truy-to-shark-thuy-lua-dao-hon-8-459-ty-dong-2563916.html" rel="noopener noreferrer">https://vietnamnet.vn/thoi-su-sang-13-10-truy-to-shark-thuy-lua-dao-hon-8-459-ty-dong-2563916.html</a></p>
+</article>
+<article class="card" data-category="đời-sống" data-ts="1791882780000">
+  <header class="card-head">
+    <span class="badge">Đời sống</span>
+    
+    <span class="src">Kenh14</span>
+    <time datetime="2026-10-13T09:13:00+00:00">2026-10-13T09:13:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://kenh14.vn/loi-khuyen-cho-nhung-gia-dinh-de-chau-nuoc-trong-nha-ve-sinh-24-24-215261013091841756.chn" rel="noopener noreferrer">Lời khuyên cho những gia đình để chậu nước trong nhà vệ sinh 24/24</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Việc đặt chậu nước trong nhà vệ sinh 24/24 là thói quen phổ biến nhưng cần lưu ý để đảm bảo vệ sinh và an toàn. Bài viết khuyên các gia đình nên đổ nước khi không dùng, tránh úp chậu ướt xuống sàn, vệ sinh chậu định kỳ và đặt ở vị trí gọn gàng để tránh trơn trượt, đặc biệt với nhà có trẻ nhỏ.</p></section>
+  <p class="linkrow"><a class="full" href="https://kenh14.vn/loi-khuyen-cho-nhung-gia-dinh-de-chau-nuoc-trong-nha-ve-sinh-24-24-215261013091841756.chn" rel="noopener noreferrer">https://kenh14.vn/loi-khuyen-cho-nhung-gia-dinh-de-chau-nuoc-trong-nha-ve-sinh-24-24-215261013091841756.chn</a></p>
+</article>
+<article class="card" data-category="sức-khỏe" data-ts="1791882480000">
+  <header class="card-head">
+    <span class="badge">Sức khỏe</span>
+    
+    <span class="src">Kenh14</span>
+    <time datetime="2026-10-13T09:08:00+00:00">2026-10-13T09:08:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://kenh14.vn/mot-khi-da-bi-ton-thuong-nghiem-trong-than-khong-the-phuc-hoi-duoc-nua-dang-tiec-nhieu-nguoi-van-duy-tri-5-thoi-quen-hai-than-moi-ngay-215261013072327613.chn" rel="noopener noreferrer">Một khi đã bị tổn thương nghiêm trọng, thận không thể phục hồi được nữa! Đáng tiếc, nhiều người vẫn duy trì 5 thói quen hại thận mỗi ngày</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Thận là cơ quan quan trọng và khó phục hồi nếu bị tổn thương nghiêm trọng, vì vậy việc nhận diện các thói quen xấu là rất cần thiết. Bài viết cảnh báo 5 sai lầm phổ biến như uống ít nước, nhịn tiểu, lạm dụng thuốc giảm đau, ăn quá mặn và thức khuya, đồng thời khuyến cáo người dân nên thay đổi lối sống để bảo vệ chức năng thận.</p></section>
+  <p class="linkrow"><a class="full" href="https://kenh14.vn/mot-khi-da-bi-ton-thuong-nghiem-trong-than-khong-the-phuc-hoi-duoc-nua-dang-tiec-nhieu-nguoi-van-duy-tri-5-thoi-quen-hai-than-moi-ngay-215261013072327613.chn" rel="noopener noreferrer">https://kenh14.vn/mot-khi-da-bi-ton-thuong-nghiem-trong-than-khong-the-phuc-hoi-duoc-nua-dang-tiec-nhieu-nguoi-van-duy-tri-5-thoi-quen-hai-than-moi-ngay-215261013072327613.chn</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791882480000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">Kenh14</span>
+    <time datetime="2026-10-13T09:08:00+00:00">2026-10-13T09:08:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://kenh14.vn/phat-hien-1-nguoi-that-nghiep-co-163-ty-dong-215261012210359974.chn" rel="noopener noreferrer">Phát hiện 1 người thất nghiệp có 16,3 tỷ đồng</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Câu chuyện về một người đàn ông Nhật Bản tên Ken, dù thất nghiệp hơn một năm nhưng vẫn sở hữu khối tài sản khoảng 16,3 tỷ đồng nhờ kiên trì đầu tư chứng khoán trong 10 năm. Bài viết nhấn mạnh tầm quan trọng của việc xác định mục tiêu tài chính, quản lý chi tiêu và tư duy đầu tư từ quy mô nhỏ để xây dựng sự ổn định lâu dài.</p></section>
+  <p class="linkrow"><a class="full" href="https://kenh14.vn/phat-hien-1-nguoi-that-nghiep-co-163-ty-dong-215261012210359974.chn" rel="noopener noreferrer">https://kenh14.vn/phat-hien-1-nguoi-that-nghiep-co-163-ty-dong-215261012210359974.chn</a></p>
+</article>
+<article class="card" data-category="văn-hóa-giải-trí" data-ts="1791882180000">
+  <header class="card-head">
+    <span class="badge">Văn hóa – Giải trí</span>
+    
+    <span class="src">Kenh14</span>
+    <time datetime="2026-10-13T09:03:00+00:00">2026-10-13T09:03:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://kenh14.vn/thu-lao-gay-soc-cua-my-nhan-viet-dep-nhat-lhp-busan-2026-215261013091127677.chn" rel="noopener noreferrer">Thù lao gây sốc của mỹ nhân Việt đẹp nhất LHP Busan 2026</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Nữ diễn viên Thùy Anh gây bất ngờ khi chia sẻ về mức thù lao 0 đồng trong dự án phim &#x27;1982&#x27; tham dự Liên hoan phim Busan 2026. Cô cho biết cả ê-kíp đã làm việc với tinh thần cống hiến vì tình yêu điện ảnh và sự gắn kết với đạo diễn Nguyễn Hoàng Điệp, thay vì đặt nặng vấn đề cát-xê.</p></section>
+  <p class="linkrow"><a class="full" href="https://kenh14.vn/thu-lao-gay-soc-cua-my-nhan-viet-dep-nhat-lhp-busan-2026-215261013091127677.chn" rel="noopener noreferrer">https://kenh14.vn/thu-lao-gay-soc-cua-my-nhan-viet-dep-nhat-lhp-busan-2026-215261013091127677.chn</a></p>
+</article>
+<article class="card" data-category="kinh-tế" data-ts="1791882060000">
+  <header class="card-head">
+    <span class="badge">Kinh tế</span>
+    
+    <span class="src">Kenh14</span>
+    <time datetime="2026-10-13T09:01:00+00:00">2026-10-13T09:01:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://kenh14.vn/bat-ngo-mot-mo-vang-cua-viet-nam-duoc-my-san-don-trong-9-thang-nhieu-cuong-quoc-cong-nghe-la-khach-ruot-xuat-sang-malaysia-tang-170-215261013000344074.chn" rel="noopener noreferrer">Bất ngờ một &#x27;mỏ vàng&#x27; của Việt Nam được Mỹ săn đón trong 9 tháng: Nhiều cường quốc công nghệ là khách ruột, xuất sang Malaysia tăng 170%</a></h2>
+  <section class="block"><h3>Tóm tắt</h3><p>Trong 9 tháng đầu năm 2026, nhóm hàng máy vi tính, sản phẩm điện tử và linh kiện tiếp tục là &#x27;mỏ vàng&#x27; xuất khẩu chủ lực của Việt Nam với kim ngạch đạt hơn 123,6 tỷ USD. Sự tăng trưởng mạnh mẽ tại các thị trường lớn như Mỹ, Trung Quốc và sự bùng nổ xuất khẩu sang Malaysia cho thấy Việt Nam đang đóng vai trò quan trọng trong chuỗi cung ứng công nghệ toàn cầu.</p></section>
+  <p class="linkrow"><a class="full" href="https://kenh14.vn/bat-ngo-mot-mo-vang-cua-viet-nam-duoc-my-san-don-trong-9-thang-nhieu-cuong-quoc-cong-nghe-la-khach-ruot-xuat-sang-malaysia-tang-170-215261013000344074.chn" rel="noopener noreferrer">https://kenh14.vn/bat-ngo-mot-mo-vang-cua-viet-nam-duoc-my-san-don-trong-9-thang-nhieu-cuong-quoc-cong-nghe-la-khach-ruot-xuat-sang-malaysia-tang-170-215261013000344074.chn</a></p>
+</article>
+    </div>
+    <div id="pane-summary" class="tab-pane" hidden>
+<div class="summary-wrap"><div class="reader-tools summary-actions">
+        <button type="button" class="apply read" id="readSummary">▶ Đọc bản tổng hợp</button>
+        <button type="button" class="reset stop" id="stopSummary" disabled>Dừng đọc</button>
+        <p id="summaryStatus"></p>
+      </div><div id="summaryText"><p>Trong lĩnh vực kinh tế, Việt Nam ghi nhận những tín hiệu tích cực khi nhóm hàng điện tử và linh kiện đạt kim ngạch xuất khẩu hơn 123,6 tỷ USD trong 9 tháng đầu năm, khẳng định vị thế trong chuỗi cung ứng toàn cầu. Tại TP.HCM, giải thưởng Thương hiệu Vàng lần thứ 6 đã vinh danh 50 doanh nghiệp tiêu biểu, nhấn mạnh vai trò dẫn dắt của khối tư nhân trong việc nâng tầm thương hiệu quốc gia. Các dự án hạ tầng trọng điểm như Cảng hàng không Quảng Trị đang tăng tốc để vận hành vào năm 2027, trong khi đường Chu Văn An tại TP.HCM cũng đang được mở rộng. Tuy nhiên, thị trường tài chính đang đối mặt với biến động khi giá vàng trong nước giảm mạnh theo xu hướng thế giới, và các doanh nghiệp đang tìm kiếm giải pháp huy động vốn mới để giảm phụ thuộc vào tín dụng ngân hàng.</p><p>Về mặt pháp luật và thời sự, VKSND Tối cao đã truy tố ông Nguyễn Ngọc Thủy (Shark Thủy) cùng 28 đồng phạm về hành vi lừa đảo chiếm đoạt hơn 8.459 tỷ đồng của hơn 10.000 nhà đầu tư. Tại Hà Nội, hai cựu nhân viên ngân hàng bị cáo buộc tiếp tay cho đường dây chuyển trái phép 52 triệu USD ra nước ngoài. Tại Đà Nẵng, cơ quan chức năng đã bắt giữ 4 đối tượng bị Interpol truy nã quốc tế đang lẩn trốn dưới vỏ bọc du khách. Trong khi đó, TP.HCM đang triển khai di dời 731 hài cốt liệt sĩ từ Công viên Lê Thị Riêng về nghĩa trang thành phố và thông báo từ ngày 15/10, hành khách có thể sử dụng ứng dụng VNeID để mua vé Metro số 1.</p><p>Tình hình thế giới ghi nhận nhiều diễn biến phức tạp. Tại Pháp, hàng trăm siêu thị bị tấn công mạng làm hư hỏng thực phẩm, trong khi tại Anh, chính phủ cáo buộc Iran đứng sau âm mưu tấn công căn cứ quân sự. Triều Tiên tiếp tục phóng loạt tên lửa đạn đạo khiến Hàn Quốc phải họp khẩn. Tại Mỹ, tỷ phú Elon Musk trở thành nhà tài trợ lớn nhất cho đảng Cộng hòa trước thềm bầu cử giữa nhiệm kỳ, đồng thời ông cũng bày tỏ quan điểm về việc thay đổi lãnh đạo tại Ukraine. Về phía NATO, liên minh này đã phác thảo chiến lược răn đe quân sự nếu bị tấn công.</p><p>Trong lĩnh vực sức khỏe và đời sống, một vụ nghi ngộ độc thực phẩm sau khi ăn bánh mì tại Quảng Ngãi đã khiến 135 người phải nhập viện, trong đó có nhiều trẻ em và thai phụ. Các chuyên gia y tế cũng cảnh báo về 5 thói quen xấu gây hại cho thận và nhấn mạnh tầm quan trọng của việc nam giới chia sẻ công việc nhà để cải thiện tuổi thọ. Về thời tiết, khu vực miền Trung đang đối mặt với mưa lớn diện rộng, nguy cơ lũ quét và sạt lở đất, trong khi miền Bắc duy trì thời tiết nắng hanh khô.</p><p>Về văn hóa, giải trí và công nghệ, diễn viên Địch Lệ Nhiệt Ba thu hút sự chú ý lớn tại Tuần lễ thời trang Paris, trong khi tại Việt Nam, các triển lãm nghệ thuật và show thời trang đang diễn ra sôi nổi. Trong lĩnh vực công nghệ, Apple chuẩn bị ra mắt dòng iPhone gập và nâng cấp Apple TV, Google giới thiệu vòng đeo sức khỏe Fitbit Edge, và các nhà khoa học Nga đang nghiên cứu loại kim loại tự phục hồi vết nứt. Bộ GD-ĐT cũng vừa ban hành hướng dẫn 7 kỹ năng số cốt lõi cho học sinh, sinh viên.</p><p>Trong thể thao, tâm điểm là các trận đấu tại Champions League, đặc biệt là cuộc đối đầu giữa Man City và PSG. Chủ tịch FIFA Gianni Infantino đang đối mặt với bê bối tài chính có thể ảnh hưởng đến khả năng tái cử. Tại Việt Nam, CLB Công An Hà Nội đang tích cực chuẩn bị cho trận đấu với Kashima Antlers tại AFC Champions League Elite. Cristiano Ronaldo tiếp tục duy trì phong độ cao tại CLB Al Nassr bất chấp những ồn ào liên quan đến đội tuyển Bồ Đào Nha.</p></div></div>
+    </div>
+  </div>
+  <script>
+(function() {
+  function countVisible() {
+    var n = document.querySelectorAll("article.card:not([hidden])").length;
+    var el = document.getElementById("visibleCount");
+    if (el) el.textContent = n;
+  }
+  function applyDayFilter() {
+    var input = document.getElementById("dayWindow");
+    var n = parseInt(input && input.value, 10);
+    if (!input || !isFinite(n) || n < 1) { alert("Nhập số ngày dương."); return; }
+    var cutoff = Date.now() - n * 86400000;
+    document.querySelectorAll("article.card").forEach(function(el) {
+      var raw = el.getAttribute("data-ts");
+      if (raw === null || raw === "") { el.hidden = true; return; }
+      var ts = parseInt(raw, 10);
+      if (!isFinite(ts)) { el.hidden = true; return; }
+      el.hidden = ts < cutoff;
+    });
+    countVisible();
+  }
+  function resetFilter() {
+    document.querySelectorAll("article.card").forEach(function(el) { el.hidden = false; });
+    countVisible();
+  }
+  var b1 = document.getElementById("applyDays");
+  var b2 = document.getElementById("resetDays");
+  if (b1) b1.addEventListener("click", applyDayFilter);
+  if (b2) b2.addEventListener("click", resetFilter);
+})();
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/microsoft-cognitiveservices-speech-sdk@1.51.0/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle-min.js" onerror="var s=document.createElement('script');s.src='https://aka.ms/csspeech/jsbrowserpackageraw';s.onerror=function(){window.__readerSdkBlocked=true;};document.head.appendChild(s);"></script>
+  <script>
+
+(function() {
+  var LANG = "vi";
+  var VOICE = "vi-VN-HoaiMyNeural";
+  var VOICE_FALLBACK = "vi-VN-NamMinhNeural";
+  var DEFAULT_REGION = "";
+  try {
+    var sp = new URLSearchParams(window.location.search || "");
+    var rv = sp.get("readerVoice");
+    var rvf = sp.get("readerVoiceFallback");
+    var rr = sp.get("readerRegion");
+    if (rv && String(rv).trim()) VOICE = String(rv).trim();
+    if (rvf && String(rvf).trim()) VOICE_FALLBACK = String(rvf).trim();
+    if (rr && String(rr).trim()) DEFAULT_REGION = String(rr).trim();
+  } catch (e) {}
+  var KEY_AZURE = "reportsDigestReaderAzureKey";
+  var KEY_REGION = "reportsDigestReaderAzureRegion";
+  var readAborted = false;
+  var currentAudio = null;
+  var stopPlayback = null;  // set while audio plays; stopRead() calls it to resolve the play promise
+  var READ_LABEL = LANG === "vi" ? "Đọc tin" : "Read news";
+  var resumeIndex = 0;   // where the next "Read" starts (0 = beginning; set after an error/stop)
+  var currentIndex = 0;  // item currently being read (for resume + status)
+  var currentRun = null; // the in-flight runRead() promise (null when idle)
+  var RATE_STORAGE_KEY = "reportsDigestReaderSpeechRate";
+  var RATE_MIN = 0.5;
+  var RATE_MAX = 2;
+  var RATE_STEP = 0.25;
+  var speechRateCached = 1;
+
+  function clampSpeechRate(r) {
+    if (!isFinite(r)) return 1;
+    return Math.min(RATE_MAX, Math.max(RATE_MIN, Math.round(r / RATE_STEP) * RATE_STEP));
+  }
+  function persistSpeechRate(r) {
+    r = clampSpeechRate(r);
+    try { sessionStorage.setItem(RATE_STORAGE_KEY, String(r)); } catch (e) {}
+    return r;
+  }
+  function loadSpeechRateOnce() {
+    var fromQs = null;
+    try {
+      var sp = new URLSearchParams(window.location.search || "");
+      var qs = sp.get("readerSpeed");
+      if (qs != null && String(qs).trim() !== "") {
+        var q = parseFloat(String(qs).replace(",", "."));
+        if (isFinite(q)) fromQs = clampSpeechRate(q);
+      }
+    } catch (e) {}
+    if (fromQs != null) { speechRateCached = persistSpeechRate(fromQs); return; }
+    try {
+      var raw = sessionStorage.getItem(RATE_STORAGE_KEY);
+      if (raw != null && String(raw).trim() !== "") {
+        var val = parseFloat(String(raw).replace(",", "."));
+        if (isFinite(val)) { speechRateCached = clampSpeechRate(val); return; }
+      }
+    } catch (e) {}
+    speechRateCached = 1;
+  }
+  function getSpeechRate() { return speechRateCached; }
+  function formatSpeechRateDisplay(r) {
+    var x = clampSpeechRate(r);
+    var s = (Math.round(x * 100) / 100).toString();
+    if (s.indexOf(".") === -1) s += ".0";
+    return s + "\u00d7";
+  }
+  function refreshSpeechRateUI() {
+    var el = document.getElementById("readerSpeedValue");
+    var dn = document.getElementById("readerSpeedDown");
+    var up = document.getElementById("readerSpeedUp");
+    var rr = getSpeechRate();
+    if (el) el.textContent = formatSpeechRateDisplay(rr);
+    if (dn) dn.disabled = rr <= RATE_MIN + 1e-9;
+    if (up) up.disabled = rr >= RATE_MAX - 1e-9;
+    applySpeechRateToPlayingAudio();
+  }
+  function applySpeechRateToPlayingAudio() {
+    if (currentAudio && currentAudio.playbackRate != null) {
+      try { currentAudio.playbackRate = getSpeechRate(); } catch (e) {}
+    }
+  }
+  function bumpSpeechRate(delta) {
+    speechRateCached = persistSpeechRate(getSpeechRate() + delta);
+    refreshSpeechRateUI();
+  }
+  loadSpeechRateOnce();
+
+  function status(msg, isErr) {
+    var el = document.getElementById("readStatus");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.className = isErr ? "err" : "";
+  }
+  function readKeyHint(msg) {
+    var el = document.getElementById("readerKeySavedHint");
+    if (el) el.textContent = msg || "";
+  }
+
+  function readStored(k) {
+    // localStorage so the key + region persist across days (until the visitor edits/clears them).
+    try { var v = localStorage.getItem(k); return v ? String(v).trim() : ""; } catch (e) { return ""; }
+  }
+  function getAzureKey() {
+    var s = readStored(KEY_AZURE);
+    if (s) return s;
+    var inp = document.getElementById("readerAzureKeyInput");
+    return inp ? String(inp.value || "").trim() : "";
+  }
+  function getAzureRegion() {
+    var inp = document.getElementById("readerAzureRegionInput");
+    var live = inp ? String(inp.value || "").trim() : "";
+    if (live) return live;
+    var s = readStored(KEY_REGION);
+    return s || DEFAULT_REGION || "";
+  }
+  function persistReaderKeys() {
+    var keyInp = document.getElementById("readerAzureKeyInput");
+    var regInp = document.getElementById("readerAzureRegionInput");
+    var key = keyInp ? String(keyInp.value || "").trim() : "";
+    var reg = regInp ? String(regInp.value || "").trim() : "";
+    if (!key && !reg) {
+      readKeyHint(LANG === "vi" ? "Nhập khóa + vùng rồi Lưu." : "Enter key + region, then Save.");
+      return false;
+    }
+    try {
+      if (key) localStorage.setItem(KEY_AZURE, key);
+      if (reg) localStorage.setItem(KEY_REGION, reg);
+    } catch (e) {
+      readKeyHint(LANG === "vi" ? "Không lưu được (localStorage)." : "Could not save (localStorage).");
+      return false;
+    }
+    var hk = readStored(KEY_AZURE);
+    var hr = readStored(KEY_REGION);
+    if (!hk || !hr) {
+      readKeyHint(
+        LANG === "vi"
+          ? (!hk ? "Thiếu khóa Azure — nhập và Lưu." : "Thiếu vùng — nhập và Lưu.")
+          : (!hk ? "Missing Azure key — enter and Save." : "Missing region — enter and Save.")
+      );
+    } else {
+      readKeyHint(LANG === "vi" ? "Đã lưu trên trình duyệt này." : "Saved on this browser.");
+    }
+    if (keyInp && key) keyInp.value = "";
+    return true;
+  }
+  function syncKeyHintOnLoad() {
+    var regInp = document.getElementById("readerAzureRegionInput");
+    var storedReg = readStored(KEY_REGION) || DEFAULT_REGION;
+    if (regInp && storedReg && !regInp.value) regInp.value = storedReg;
+    var k = readStored(KEY_AZURE);
+    if (k) readKeyHint(LANG === "vi" ? "Đã lưu khóa Azure trên trình duyệt này." : "Azure key saved on this browser.");
+  }
+
+  function visibleCards() {
+    return Array.prototype.slice.call(document.querySelectorAll("article.card")).filter(function(c) { return !c.hidden; });
+  }
+  function cardTitle(card) {
+    var ta = card.querySelector(".topic a");
+    return ta ? ta.textContent.trim() : "";
+  }
+  function cardText(card) {
+    var title = cardTitle(card);
+    var blocks = card.querySelectorAll(".block p");
+    var chunks = [];
+    for (var i = 0; i < blocks.length; i++) chunks.push(blocks[i].textContent.trim());
+    return (title ? title + ". " : "") + chunks.join(" ");
+  }
+
+  // One synthesizer per voice, kept alive across cards so the Azure websocket
+  // stays warm instead of reconnecting per card (per-card reconnects were a
+  // source of wss 1006). Disposed on error (so a retry reconnects) and when the
+  // read finishes/stops or the credentials change.
+  var synthCache = {};   // voiceId -> SpeechSynthesizer
+  var synthCreds = null;   // { key, region } the cached synthesizers were built with
+
+  function disposeSynth(voiceId) {
+    var s = synthCache[voiceId];
+    if (s) { try { s.close(); } catch (e) {} delete synthCache[voiceId]; }
+  }
+  function disposeAllSynths() {
+    for (var k in synthCache) { if (Object.prototype.hasOwnProperty.call(synthCache, k)) disposeSynth(k); }
+    synthCache = {};
+    synthCreds = null;
+  }
+  function getSynth(SDK, key, region, voiceId) {
+    if (!synthCreds || synthCreds.key !== key || synthCreds.region !== region) {
+      disposeAllSynths();
+      synthCreds = { key: key, region: region };
+    }
+    if (!synthCache[voiceId]) {
+      var cfg = SDK.SpeechConfig.fromSubscription(key, region);
+      cfg.speechSynthesisVoiceName = voiceId;
+      cfg.speechSynthesisOutputFormat = SDK.SpeechSynthesisOutputFormat.Audio24Khz48KBitRateMonoMp3;
+      synthCache[voiceId] = new SDK.SpeechSynthesizer(cfg, null);
+    }
+    return synthCache[voiceId];
+  }
+
+  function synthOnce(key, region, text, voiceId) {
+    return new Promise(function(resolve, reject) {
+      var SDK = window.SpeechSDK;
+      if (!SDK) {
+        var blocked = !!window.__readerSdkBlocked;
+        reject(new Error(
+          LANG === "vi"
+            ? (blocked
+                ? "Chưa tải được Azure Speech SDK — trình duyệt đang chặn (tắt trình chặn quảng cáo/VPN của Opera hoặc dùng trình duyệt khác)."
+                : "Chưa tải được Azure Speech SDK — thử tải lại trang.")
+            : (blocked
+                ? "Azure Speech SDK failed to load — your browser is blocking it (disable Opera's built-in ad blocker/VPN, or use another browser)."
+                : "Azure Speech SDK failed to load — try reloading the page.")
+        ));
+        return;
+      }
+      var synth;
+      try {
+        synth = getSynth(SDK, key, region, voiceId);
+      } catch (e) { disposeSynth(voiceId); reject(e); return; }
+      synth.speakTextAsync(
+        text,
+        function(result) {
+          if (result.reason === SDK.ResultReason.SynthesizingAudioCompleted) {
+            resolve(result.audioData);  // keep the synthesizer open for the next card
+          } else {
+            var msg = result.errorDetails || ("TTS failed: " + result.reason);
+            disposeSynth(voiceId);      // drop it so a retry rebuilds the connection
+            reject(new Error(msg));
+          }
+        },
+        function(err) { disposeSynth(voiceId); reject(new Error(String(err))); }
+      );
+    });
+  }
+  // Ignore a pending prefetch we no longer await, so closing its synthesizer
+  // does not surface as an unhandled promise rejection.
+  function swallow(p) { if (p && typeof p.then === "function") { try { p.then(null, function() {}); } catch (e) {} } }
+  function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+  function isTransientErr(e) {
+    var m = (e && e.message ? e.message : String(e)) || "";
+    // 1006 = abnormal websocket close; also generic connect/timeout/network drops.
+    return /1006|Unable to contact server|websocket|connection\s|connection\.|timed out|timeout|network/i.test(m);
+  }
+  // Retry the SAME voice on transient connection drops (e.g. wss 1006) before giving up.
+  // Backoff grows (1s, 2s, 4s, 6s) to ride through short Azure outages rather than aborting.
+  var SYNTH_RETRIES = 5;
+  var SYNTH_BACKOFF_MS = [1000, 2000, 4000, 6000];
+  async function synthWithRetry(key, region, text, voiceId) {
+    var lastErr;
+    for (var attempt = 0; attempt < SYNTH_RETRIES; attempt++) {
+      if (readAborted) throw new Error("aborted");
+      try {
+        return await synthOnce(key, region, text, voiceId);
+      } catch (e) {
+        lastErr = e;
+        if (!isTransientErr(e) || attempt === SYNTH_RETRIES - 1) throw e;
+        console.warn("Reader TTS: transient failure, retrying (" + (attempt + 1) + ")", e);
+        await sleep(SYNTH_BACKOFF_MS[Math.min(attempt, SYNTH_BACKOFF_MS.length - 1)]);
+      }
+    }
+    throw lastErr;
+  }
+  async function synth(key, region, text) {
+    try {
+      return await synthWithRetry(key, region, text, VOICE);
+    } catch (e1) {
+      if (!VOICE_FALLBACK || VOICE_FALLBACK === VOICE) throw e1;
+      console.warn("Reader TTS: primary voice failed, trying fallback", e1);
+      return await synthWithRetry(key, region, text, VOICE_FALLBACK);
+    }
+  }
+
+  function playMp3Buffer(buf) {
+    return new Promise(function(resolve, reject) {
+      if (readAborted) { resolve(); return; }
+      var blob = new Blob([buf], { type: "audio/mpeg" });
+      var url = URL.createObjectURL(blob);
+      var audio = new Audio(url);
+      currentAudio = audio;
+      try { audio.playbackRate = getSpeechRate(); } catch (e) {}  // apply speed to EVERY item, not just the first
+      var settled = false;
+      function finish(err) {
+        if (settled) return;
+        settled = true;
+        stopPlayback = null;
+        try { URL.revokeObjectURL(url); } catch (e) {}
+        currentAudio = null;
+        // A stop() tears down the element (fires 'error'/rejects play) — that's expected, resolve.
+        if (err && !readAborted) { reject(err); } else { resolve(); }
+      }
+      // stopRead() calls this so the awaiting loop unblocks immediately on "Dừng đọc"
+      // (removing the src does not reliably fire an event, which would hang the read).
+      stopPlayback = function() { finish(null); };
+      audio.onended = function() { finish(null); };
+      audio.onerror = function() { finish(new Error("Audio playback failed.")); };
+      audio.play().catch(function(e) { finish(e); });
+    });
+  }
+
+  function setReadingUI(reading) {
+    var readBtn = document.getElementById("readNews");
+    var stopBtn = document.getElementById("stopRead");
+    if (readBtn) readBtn.disabled = reading;
+    if (stopBtn) stopBtn.disabled = !reading;
+  }
+  function updateReadButtonLabel() {
+    var readBtn = document.getElementById("readNews");
+    if (!readBtn) return;
+    readBtn.textContent = resumeIndex > 0
+      ? (LANG === "vi" ? "Đọc tiếp (mục " : "Continue (item ") + (resumeIndex + 1) + ")"
+      : READ_LABEL;
+  }
+  function itemLabel(j, total, title) {
+    var t = title ? ": " + (title.length > 80 ? title.slice(0, 79) + "…" : title) : "";
+    return (j + 1) + "/" + total + t;
+  }
+
+  async function runRead(startIndex) {
+    readAborted = false;
+    var cards = visibleCards();
+    if (!cards.length) {
+      status(LANG === "vi" ? "Không có bài đang hiển thị." : "No articles visible.", true);
+      return;
+    }
+    var key = getAzureKey();
+    var region = getAzureRegion();
+    if (!key || !region) {
+      status(
+        LANG === "vi"
+          ? "Nhập và lưu khóa Azure Speech + vùng để đọc."
+          : "Enter and save an Azure Speech key + region to read.",
+        true
+      );
+      var f = document.getElementById(key ? "readerAzureRegionInput" : "readerAzureKeyInput");
+      if (f) f.focus();
+      return;
+    }
+
+    // Index-aligned with visibleCards() so a per-card "read from here" maps 1:1 to texts[].
+    var texts = cards.map(cardText);
+    var titles = cards.map(cardTitle);
+    var total = texts.length;
+    if (!total) {
+      status(LANG === "vi" ? "Không có nội dung để đọc." : "No readable content.", true);
+      return;
+    }
+    var start = Math.min(Math.max(parseInt(startIndex, 10) || 0, 0), total - 1);
+
+    setReadingUI(true);
+    if (currentAudio) { try { currentAudio.pause(); } catch (e) {} currentAudio = null; }
+
+    var prefetch = null;
+    var j = start;
+    try {
+      prefetch = synth(key, region, texts[start]);
+      for (j = start; j < total; j++) {
+        if (readAborted) break;
+        currentIndex = j;
+        status((LANG === "vi" ? "Đang đọc " : "Reading ") + itemLabel(j, total, titles[j]));
+        var buf = await prefetch;
+        if (readAborted) break;
+        prefetch = (j + 1 < total) ? synth(key, region, texts[j + 1]) : null;
+        await playMp3Buffer(buf);
+      }
+    } catch (e) {
+      swallow(prefetch); disposeAllSynths();
+      if (readAborted) {
+        resumeIndex = currentIndex;
+        status((LANG === "vi" ? "Đã dừng ở mục " : "Stopped at item ") + itemLabel(currentIndex, total, titles[currentIndex]) +
+          (LANG === "vi" ? " — bấm Đọc tiếp để tiếp tục." : " — click Continue to resume."), false);
+      } else {
+        resumeIndex = j;  // remember the failed item so the user can retry from here
+        status((LANG === "vi" ? "Lỗi ở mục " : "Error at item ") + itemLabel(j, total, titles[j]) + " — " +
+          String(e && e.message ? e.message : e) + " " +
+          (LANG === "vi" ? "Bấm \u201cĐọc tiếp\u201d để đọc lại từ mục này." : "Click \u201cContinue\u201d to retry from this item."), true);
+      }
+      setReadingUI(false);
+      updateReadButtonLabel();
+      return;
+    }
+
+    swallow(prefetch); disposeAllSynths();
+    if (readAborted) {
+      resumeIndex = currentIndex;  // resume from where the user stopped
+      status((LANG === "vi" ? "Đã dừng ở mục " : "Stopped at item ") + itemLabel(currentIndex, total, titles[currentIndex]) +
+        (LANG === "vi" ? " — bấm Đọc tiếp để tiếp tục." : " — click Continue to resume."), false);
+    } else {
+      resumeIndex = 0;  // finished the whole list — next read starts from the top
+      status(LANG === "vi" ? "Đã đọc xong." : "Finished reading.", false);
+    }
+    setReadingUI(false);
+    updateReadButtonLabel();
+  }
+
+  function stopRead() {
+    // Just signal the abort + tear down audio; runRead's loop reports the stop point,
+    // sets resumeIndex, and restores the buttons (so "Đọc tiếp" resumes from here).
+    readAborted = true;
+    if (currentAudio) {
+      try { currentAudio.pause(); currentAudio.removeAttribute("src"); currentAudio.load(); } catch (e) {}
+      currentAudio = null;
+    }
+    if (stopPlayback) { try { stopPlayback(); } catch (e) {} }  // unblock the awaiting read loop
+    disposeAllSynths();  // free the Azure websocket immediately on stop
+  }
+
+  // Start reading at a chosen item. If a read is already running, stop it and wait for the
+  // loop to unwind before starting the new one (so the two don't overlap on shared state).
+  async function startFromIndex(idx) {
+    if (currentRun) {
+      stopRead();
+      try { await currentRun; } catch (e) {}
+    }
+    resumeIndex = idx > 0 ? idx : 0;
+    currentRun = runRead(idx);
+    currentRun.then(function() { currentRun = null; }, function() { currentRun = null; });
+    return currentRun;
+  }
+
+  var CARD_BTN_LABEL = LANG === "vi" ? "▶ Đọc từ đây" : "▶ Read from here";
+  function injectCardReadButtons() {
+    var cards = document.querySelectorAll("article.card");
+    for (var i = 0; i < cards.length; i++) {
+      (function(card) {
+        if (card.querySelector(".reader-card-btn")) return;
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "reader-card-btn";
+        btn.textContent = CARD_BTN_LABEL;
+        btn.title = LANG === "vi" ? "Đọc từ bài này trở đi" : "Read from this article onward";
+        btn.addEventListener("click", function() {
+          var vis = visibleCards();
+          var idx = vis.indexOf(card);
+          if (idx < 0) return;  // hidden by the day filter
+          startFromIndex(idx).catch(function(e) { status(String(e), true); });
+        });
+        var topic = card.querySelector(".topic");
+        if (topic) topic.appendChild(btn); else card.insertBefore(btn, card.firstChild);
+      })(cards[i]);
+    }
+  }
+
+  // ---- Summary ("Tổng hợp") tab: read the synthesized briefing via the same TTS engine ----
+  function summaryStatus(msg, isErr) {
+    var el = document.getElementById("summaryStatus");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.className = isErr ? "err" : "";
+  }
+  function setSummaryReadingUI(reading) {
+    var rb = document.getElementById("readSummary");
+    var sb = document.getElementById("stopSummary");
+    if (rb) rb.disabled = reading;
+    if (sb) sb.disabled = !reading;
+  }
+  function collectSummaryChunks() {
+    var el = document.getElementById("summaryText");
+    if (!el) return [];
+    var chunks = [];
+    var ps = el.querySelectorAll("p");
+    for (var i = 0; i < ps.length; i++) { var t = ps[i].textContent.trim(); if (t) chunks.push(t); }
+    if (!chunks.length) { var all = el.textContent.trim(); if (all) chunks.push(all); }
+    return chunks;
+  }
+  async function runSummary() {
+    // Reuse the shared engine (synth/playMp3Buffer/stopPlayback/speed); paragraph = chunk.
+    if (currentRun) { stopRead(); try { await currentRun; } catch (e) {} }
+    currentRun = (async function() {
+      readAborted = false;
+      var chunks = collectSummaryChunks();
+      if (!chunks.length) {
+        summaryStatus(LANG === "vi" ? "Chưa có bản tổng hợp." : "No summary available.", true);
+        return;
+      }
+      var key = getAzureKey(), region = getAzureRegion();
+      if (!key || !region) {
+        summaryStatus(LANG === "vi" ? "Nhập và lưu khóa Azure Speech + vùng để đọc." : "Enter and save an Azure Speech key + region to read.", true);
+        return;
+      }
+      setSummaryReadingUI(true);
+      if (currentAudio) { try { currentAudio.pause(); } catch (e) {} currentAudio = null; }
+      var prefetch = null;
+      try {
+        prefetch = synth(key, region, chunks[0]);
+        for (var j = 0; j < chunks.length; j++) {
+          if (readAborted) break;
+          summaryStatus((LANG === "vi" ? "Đang đọc bản tổng hợp… " : "Reading the summary… ") + (j + 1) + "/" + chunks.length);
+          var buf = await prefetch;
+          if (readAborted) break;
+          prefetch = (j + 1 < chunks.length) ? synth(key, region, chunks[j + 1]) : null;
+          await playMp3Buffer(buf);
+        }
+      } catch (e) {
+        swallow(prefetch); disposeAllSynths();
+        if (!readAborted) summaryStatus(String(e && e.message ? e.message : e), true);
+        else summaryStatus(LANG === "vi" ? "Đã dừng." : "Stopped.", false);
+        setSummaryReadingUI(false);
+        return;
+      }
+      swallow(prefetch); disposeAllSynths();
+      summaryStatus(readAborted ? (LANG === "vi" ? "Đã dừng." : "Stopped.") : (LANG === "vi" ? "Đã đọc xong." : "Finished."), false);
+      setSummaryReadingUI(false);
+    })();
+    currentRun.then(function() { currentRun = null; }, function() { currentRun = null; });
+    return currentRun;
+  }
+
+  function initTabs() {
+    var btns = document.querySelectorAll(".tab-btn");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].addEventListener("click", function() {
+        var target = this.getAttribute("data-tab");
+        var allBtns = document.querySelectorAll(".tab-btn");
+        for (var k = 0; k < allBtns.length; k++) {
+          var t = allBtns[k].getAttribute("data-tab");
+          var pane = document.getElementById(t);
+          var on = t === target;
+          allBtns[k].className = on ? "tab-btn active" : "tab-btn";
+          if (pane) pane.hidden = !on;
+        }
+      });
+    }
+  }
+
+  var r = document.getElementById("readNews");
+  var s = document.getElementById("stopRead");
+  var saveBtn = document.getElementById("saveReaderApiKey");
+  var keyInp = document.getElementById("readerAzureKeyInput");
+  var regInp = document.getElementById("readerAzureRegionInput");
+  if (r) r.addEventListener("click", function() { startFromIndex(resumeIndex).catch(function(e) { status(String(e), true); }); });
+  if (s) s.addEventListener("click", stopRead);
+  var sumR = document.getElementById("readSummary");
+  var sumS = document.getElementById("stopSummary");
+  if (sumR) sumR.addEventListener("click", function() { runSummary().catch(function(e) { summaryStatus(String(e), true); }); });
+  if (sumS) sumS.addEventListener("click", stopRead);
+  if (saveBtn) saveBtn.addEventListener("click", persistReaderKeys);
+  function onEnter(el) {
+    if (!el) return;
+    el.addEventListener("keydown", function(ev) { if (ev.key === "Enter") { ev.preventDefault(); persistReaderKeys(); } });
+  }
+  onEnter(keyInp);
+  onEnter(regInp);
+  var spdDn = document.getElementById("readerSpeedDown");
+  var spdUp = document.getElementById("readerSpeedUp");
+  if (spdDn) spdDn.addEventListener("click", function() { bumpSpeechRate(-RATE_STEP); });
+  if (spdUp) spdUp.addEventListener("click", function() { bumpSpeechRate(RATE_STEP); });
+  refreshSpeechRateUI();
+  syncKeyHintOnLoad();
+  injectCardReadButtons();
+  initTabs();
+})();
+
+  </script>
+  <script>
+
+(function() {
+  var LANG = "vi";
+  var REPO = "HiepTon/reports";
+  var REF = "main";
+  var KEY_TOKEN = "reportsDigestRebuildGithubToken";
+
+  function status(msg, isErr) {
+    var el = document.getElementById("rebuildStatus");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.className = isErr ? "err" : "";
+  }
+  function hint(msg) {
+    var el = document.getElementById("rebuildTokenHint");
+    if (el) el.textContent = msg || "";
+  }
+  function readToken() {
+    try { var v = localStorage.getItem(KEY_TOKEN); return v ? String(v).trim() : ""; } catch (e) { return ""; }
+  }
+  function getToken() {
+    var s = readToken();
+    if (s) return s;
+    var inp = document.getElementById("rebuildTokenInput");
+    return inp ? String(inp.value || "").trim() : "";
+  }
+  function saveToken() {
+    var inp = document.getElementById("rebuildTokenInput");
+    var t = inp ? String(inp.value || "").trim() : "";
+    if (!t) { hint(LANG === "vi" ? "Nhập token rồi Lưu." : "Enter a token, then Save."); return; }
+    try { localStorage.setItem(KEY_TOKEN, t); } catch (e) {
+      hint(LANG === "vi" ? "Không lưu được (localStorage)." : "Could not save (localStorage)."); return;
+    }
+    if (inp) inp.value = "";
+    hint(LANG === "vi" ? "Đã lưu token trên trình duyệt này." : "Token saved on this browser.");
+  }
+
+  async function runRebuild() {
+    var token = getToken();
+    if (!token) {
+      status(LANG === "vi" ? "Nhập và lưu GitHub token để chạy." : "Enter and save a GitHub token to run.", true);
+      var f = document.getElementById("rebuildTokenInput");
+      if (f) f.focus();
+      return;
+    }
+    var sel = document.getElementById("rebuildWorkflow");
+    var wf = sel ? sel.value : "";
+    if (!wf) { status(LANG === "vi" ? "Chọn bản tin để tạo lại." : "Choose a digest to rebuild.", true); return; }
+    var btn = document.getElementById("rebuildRun");
+    if (btn) btn.disabled = true;
+    status(LANG === "vi" ? "Đang gửi yêu cầu…" : "Dispatching…");
+    try {
+      var url = "https://api.github.com/repos/" + REPO + "/actions/workflows/" + encodeURIComponent(wf) + "/dispatches";
+      var resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Accept": "application/vnd.github+json",
+          "Authorization": "Bearer " + token,
+          "X-GitHub-Api-Version": "2022-11-28",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ ref: REF })
+      });
+      if (resp.status === 204) {
+        status(LANG === "vi"
+          ? "Đã kích hoạt build ✓ (chạy vài phút; tải lại trang sau khi xong)."
+          : "Build queued ✓ (takes a few minutes; reload the page when it finishes).", false);
+      } else {
+        var detail = "";
+        try { var j = await resp.json(); detail = j && j.message ? j.message : ""; } catch (e) {}
+        var base = (LANG === "vi" ? "Không kích hoạt được (HTTP " : "Dispatch failed (HTTP ") + resp.status + ")";
+        if (resp.status === 401 || resp.status === 403) base += LANG === "vi" ? " — token thiếu quyền Actions ghi." : " — token lacks Actions write access.";
+        else if (resp.status === 404) base += LANG === "vi" ? " — sai repo/workflow hoặc token không có quyền." : " — wrong repo/workflow, or the token can't see it.";
+        status(detail ? base + ": " + detail : base, true);
+      }
+    } catch (e) {
+      status(String(e && e.message ? e.message : e), true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  var runBtn = document.getElementById("rebuildRun");
+  var saveBtn = document.getElementById("saveRebuildToken");
+  var tokInp = document.getElementById("rebuildTokenInput");
+  if (runBtn) runBtn.addEventListener("click", function() { runRebuild().catch(function(e) { status(String(e), true); }); });
+  if (saveBtn) saveBtn.addEventListener("click", saveToken);
+  if (tokInp) tokInp.addEventListener("keydown", function(ev) { if (ev.key === "Enter") { ev.preventDefault(); saveToken(); } });
+  if (readToken()) hint(LANG === "vi" ? "Đã lưu GitHub token trên trình duyệt này." : "GitHub token saved on this browser.");
+})();
+
+  </script>
+</body>
+</html>
