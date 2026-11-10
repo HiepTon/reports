@@ -119,7 +119,9 @@ def digest_reader_toolbar_inner(*, lang: str) -> str:
       </div>
       <div class="reader-actions-row">
         <button type="button" class="apply read" id="readNews">Đọc tin</button>
+        <button type="button" class="reset stop" id="prevRead" title="Đọc bài trước" disabled>⏮ Bài trước</button>
         <button type="button" class="reset stop" id="stopRead" disabled>Dừng đọc</button>
+        <button type="button" class="reset stop" id="nextRead" title="Đọc bài tiếp theo" disabled>Bài sau ⏭</button>
         <div class="reader-speed-wrap" role="group" aria-label="Tốc độ đọc">
           <span class="reader-speed-heading">Tốc độ</span>
           <button type="button" class="reader-speed-btn" id="readerSpeedDown" title="Chậm hơn" aria-label="Chậm hơn">−</button>
@@ -140,7 +142,9 @@ def digest_reader_toolbar_inner(*, lang: str) -> str:
       </div>
       <div class="reader-actions-row">
         <button type="button" class="apply read" id="readNews">Read news</button>
+        <button type="button" class="reset stop" id="prevRead" title="Read the previous article" disabled>⏮ Previous</button>
         <button type="button" class="reset stop" id="stopRead" disabled>Stop</button>
+        <button type="button" class="reset stop" id="nextRead" title="Read the next article" disabled>Next ⏭</button>
         <div class="reader-speed-wrap" role="group" aria-label="Reading speed">
           <span class="reader-speed-heading">Speed</span>
           <button type="button" class="reader-speed-btn" id="readerSpeedDown" title="Slower" aria-label="Slower">−</button>
@@ -206,6 +210,8 @@ def digest_reader_script(
   var resumeIndex = 0;   // where the next "Read" starts (0 = beginning; set after an error/stop)
   var currentIndex = 0;  // item currently being read (for resume + status)
   var currentRun = null; // the in-flight runRead() promise (null when idle)
+  var currentTotal = 0;  // number of items in the in-flight card read (0 when not reading cards)
+  var cardReading = false; // true while runRead() (not the summary) is playing
   var RATE_STORAGE_KEY = "reportsDigestReaderSpeechRate";
   var RATE_MIN = 0.5;
   var RATE_MAX = 2;
@@ -485,6 +491,23 @@ def digest_reader_script(
     var stopBtn = document.getElementById("stopRead");
     if (readBtn) readBtn.disabled = reading;
     if (stopBtn) stopBtn.disabled = !reading;
+    cardReading = reading;
+    updateNavButtons();
+  }}
+  function updateNavButtons() {{
+    var prevBtn = document.getElementById("prevRead");
+    var nextBtn = document.getElementById("nextRead");
+    if (prevBtn) prevBtn.disabled = !cardReading || currentIndex <= 0;
+    if (nextBtn) nextBtn.disabled = !cardReading || currentIndex >= currentTotal - 1;
+  }}
+  // Skip to the previous/next article while reading (restarts the read loop at that item).
+  function jumpRelative(delta) {{
+    if (!cardReading) return;
+    var idx = currentIndex + delta;
+    if (idx < 0 || idx >= currentTotal) return;
+    cardReading = false;  // block repeat clicks until the restarted loop is running
+    updateNavButtons();
+    startFromIndex(idx).catch(function(e) {{ status(String(e), true); }});
   }}
   function updateReadButtonLabel() {{
     var readBtn = document.getElementById("readNews");
@@ -523,6 +546,7 @@ def digest_reader_script(
     var texts = cards.map(cardText);
     var titles = cards.map(cardTitle);
     var total = texts.length;
+    currentTotal = total;
     if (!total) {{
       status(LANG === "vi" ? "Không có nội dung để đọc." : "No readable content.", true);
       return;
@@ -539,6 +563,7 @@ def digest_reader_script(
       for (j = start; j < total; j++) {{
         if (readAborted) break;
         currentIndex = j;
+        updateNavButtons();
         status((LANG === "vi" ? "Đang đọc " : "Reading ") + itemLabel(j, total, titles[j]));
         var buf = await prefetch;
         if (readAborted) break;
@@ -712,6 +737,10 @@ def digest_reader_script(
   var regInp = document.getElementById("readerAzureRegionInput");
   if (r) r.addEventListener("click", function() {{ startFromIndex(resumeIndex).catch(function(e) {{ status(String(e), true); }}); }});
   if (s) s.addEventListener("click", stopRead);
+  var pv = document.getElementById("prevRead");
+  var nx = document.getElementById("nextRead");
+  if (pv) pv.addEventListener("click", function() {{ jumpRelative(-1); }});
+  if (nx) nx.addEventListener("click", function() {{ jumpRelative(1); }});
   var sumR = document.getElementById("readSummary");
   var sumS = document.getElementById("stopSummary");
   if (sumR) sumR.addEventListener("click", function() {{ runSummary().catch(function(e) {{ summaryStatus(String(e), true); }}); }});

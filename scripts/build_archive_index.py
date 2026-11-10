@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 import html
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.html$")
@@ -61,7 +61,7 @@ def _section_html(archive_dir: Path, subdir: str, heading: str) -> str:
 
 
 def build_index_html(archive_dir: Path) -> str:
-    when = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    when = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M (UTC+7)")
     sections = "\n".join(_section_html(archive_dir, sub, head) for sub, head in _SECTIONS)
     return f"""<!doctype html>
 <html lang="en">

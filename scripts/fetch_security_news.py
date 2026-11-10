@@ -914,7 +914,7 @@ def build_html(
     read_news_azure_voice_fallback: str = READ_NEWS_AZURE_VOICE_FALLBACK_EN_DEFAULT,
     read_news_azure_region: str | None = None,
 ) -> str:
-    when = (generated_at or datetime.now(timezone.utc)).strftime("%Y-%m-%d %H:%M UTC")
+    when = (generated_at or datetime.now(timezone.utc)).astimezone(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M (UTC+7)")
     day_default = str(server_days if server_days is not None else 14)
     filter_note = (
         f"Feed window (server): last {server_days} day(s), parseable publish dates only."
