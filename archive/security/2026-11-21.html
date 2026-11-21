@@ -1,0 +1,1559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Security news digest</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --card: #1a2332;
+      --text: #e7ecf3;
+      --muted: #9fb0c8;
+      --accent: #5b9bd5;
+      --border: #2a3a52;
+      --li: #0a66c2;
+      --li-hover: #004182;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.55;
+    }
+    .wrap { max-width: 52rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+    h1 { font-size: 1.35rem; font-weight: 650; margin: 0 0 0.25rem; }
+    .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 0.75rem; }
+    .submeta { display: inline-block; margin-top: 0.35rem; font-size: 0.82rem; color: #8fa6bf; line-height: 1.45; }
+    .toolbar {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem;
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 0.75rem 1rem; margin-bottom: 1.25rem; font-size: 0.92rem;
+    }
+    .toolbar label { color: var(--muted); display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+    .toolbar input[type="number"] {
+      width: 4.5rem; padding: 0.35rem 0.45rem; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--bg); color: var(--text); font-size: 0.95rem;
+    }
+    .toolbar button {
+      cursor: pointer; border: none; border-radius: 6px; padding: 0.4rem 0.85rem;
+      font-size: 0.88rem; font-weight: 600;
+    }
+    .toolbar .apply { background: var(--accent); color: #0a111a; }
+    .toolbar .reset { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .toolbar .apply:hover { filter: brightness(1.08); }
+    .toolbar .reset:hover { color: var(--text); }
+    .filter-hint { width: 100%; font-size: 0.8rem; color: var(--muted); margin: 0.25rem 0 0; }
+    .card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      padding: 1rem 1.15rem 1.1rem; margin-bottom: 1rem;
+    }
+    .card-head { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; justify-content: space-between;
+      align-items: baseline; font-size: 0.82rem; color: var(--muted); margin-bottom: 0.35rem; }
+    .src { font-weight: 600; color: var(--accent); }
+    .card-head time { margin-left: auto; }
+    .badge-nosum { background: transparent; color: #d8a24a; border: 1px solid #6b562f;
+      border-radius: 6px; padding: 0.1rem 0.45rem; font-weight: 600; font-size: 0.78rem; }
+    .topic { font-size: 1.1rem; margin: 0.2rem 0 0.75rem; line-height: 1.35; }
+    .topic a { color: var(--text); text-decoration: none; }
+    .topic a:hover { text-decoration: underline; color: var(--accent); }
+    .block h3 { margin: 0 0 0.35rem; font-size: 0.72rem; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--muted); font-weight: 650; }
+    .block p { margin: 0; font-size: 0.95rem; color: #d5dde8; }
+    .analysis p { color: #cfe0c9; }
+    .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.85rem; }
+    .actions a {
+      display: inline-block; text-decoration: none; border-radius: 6px; padding: 0.45rem 0.9rem;
+      font-size: 0.88rem; font-weight: 600;
+    }
+    .btn-li { background: var(--li); color: #fff; }
+    .btn-li:hover { background: var(--li-hover); }
+    .btn-sec { background: transparent; color: var(--accent); border: 1px solid var(--border); }
+    .btn-sec:hover { border-color: var(--accent); }
+    .linkrow { margin: 0.85rem 0 0; word-break: break-all; font-size: 0.85rem; }
+    a.full { color: var(--accent); }
+
+    .reader-tools { display: flex; flex-direction: column; gap: 0.55rem; width: 100%; margin-top: 0.65rem; padding-top: 0.65rem; border-top: 1px solid var(--border); }
+    .reader-key-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem 0.65rem; width: 100%; font-size: 0.88rem; }
+    .reader-key-row label { color: var(--muted); font-weight: 600; }
+    .reader-api-input {
+      flex: 1 1 12rem; min-width: 9rem; max-width: 100%; padding: 0.4rem 0.55rem; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.88rem;
+    }
+    .reader-region-input { flex: 0 1 8rem; min-width: 6rem; }
+    .reader-save-key { flex: 0 0 auto; }
+    .reader-key-hint { flex: 1 1 10rem; font-size: 0.78rem; color: var(--muted); }
+    .reader-actions-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; }
+    .reader-speed-wrap {
+      display: inline-flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;
+      padding: 0.15rem 0.35rem; border-radius: 6px; border: 1px solid var(--border); background: rgba(0,0,0,0.12);
+    }
+    .reader-speed-wrap .reader-speed-heading { color: var(--muted); font-size: 0.78rem; font-weight: 600; margin: 0; }
+    .reader-speed-btn {
+      cursor: pointer; min-width: 2rem; padding: 0.3rem 0.45rem; border-radius: 5px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.95rem; font-weight: 700; line-height: 1;
+    }
+    .reader-speed-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .reader-speed-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    #readerSpeedValue {
+      min-width: 3rem; text-align: center; font-size: 0.82rem; font-variant-numeric: tabular-nums;
+      font-weight: 650; color: var(--text);
+    }
+    .reader-tools .read { background: var(--accent); color: #0a111a; }
+    .reader-tools .stop { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .reader-tools .read:disabled, .reader-tools .stop:disabled { opacity: 0.45; cursor: not-allowed; }
+    #readStatus { flex: 1 1 12rem; font-size: 0.8rem; color: var(--muted); margin: 0; min-height: 1.2em; }
+    #readStatus.err { color: #f0a4a4; }
+    .reader-card-btn {
+      display: inline-block; margin-left: 0.5rem; padding: 0.1rem 0.45rem; vertical-align: middle;
+      font-size: 0.72rem; font-weight: 600; cursor: pointer; border-radius: 5px;
+      border: 1px solid var(--border); background: transparent; color: var(--muted); white-space: nowrap;
+    }
+    .reader-card-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .tabs { display: flex; gap: 0.4rem; margin: 0.9rem 0 0.2rem; border-bottom: 1px solid var(--border); }
+    .tab-btn {
+      cursor: pointer; padding: 0.45rem 0.9rem; font-size: 0.92rem; font-weight: 650;
+      background: transparent; color: var(--muted); border: 1px solid transparent; border-bottom: none;
+      border-radius: 8px 8px 0 0; margin-bottom: -1px;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-color: var(--border); border-bottom: 1px solid var(--bg); background: var(--card, rgba(255,255,255,0.02)); }
+    .tab-pane[hidden] { display: none; }
+    .summary-wrap { margin-top: 0.9rem; }
+    #summaryText { font-size: 1rem; line-height: 1.65; color: #d5dde8; }
+    #summaryText p { margin: 0 0 0.9rem; }
+    .summary-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; margin: 0.4rem 0 1rem; }
+    #summaryStatus { flex: 1 1 12rem; font-size: 0.8rem; color: var(--muted); margin: 0; min-height: 1.2em; }
+    #summaryStatus.err { color: #f0a4a4; }
+    .summary-empty { color: var(--muted); }
+
+
+    .rebuild-select { flex: 0 1 12rem; min-width: 8rem; cursor: pointer; }
+    #rebuildStatus { flex: 1 1 12rem; font-size: 0.8rem; color: var(--muted); margin: 0; min-height: 1.2em; }
+    #rebuildStatus.err { color: #f0a4a4; }
+
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Security news digest</h1>
+    <p class="meta">Generated 2026-11-21 14:59 (UTC+7) · <span id="visibleCount">43</span> shown · <a class="full" href="archive/">🕘 History</a><br/>
+    <span class="submeta">Summaries and analysis were generated by Gemini (gemini-3.1-flash-lite) from plain text extracted from each article page (not only RSS snippets); verify critical facts against the source.</span></p>
+    <div class="tabs" role="tablist">
+      <button type="button" class="tab-btn active" data-tab="pane-news">News</button>
+      <button type="button" class="tab-btn" data-tab="pane-summary">Summary</button>
+    </div>
+    <div id="pane-news" class="tab-pane">
+    <div class="toolbar">
+      <label>Show articles from last
+        <input type="number" id="dayWindow" min="1" max="3650" value="1"/>
+        days
+      </label>
+      <button type="button" class="apply" id="applyDays">Apply</button>
+      <button type="button" class="reset" id="resetDays">Show all</button>
+      <p class="filter-hint">Feed window (server): last 1 day(s), parseable publish dates only. Client filter hides cards without a machine date. Read news: Azure AI Speech synthesizes the summaries on this page (voice en-US-AriaNeural / fallback en-US-JennyNeural); Azure key + region in-toolbar, saved in localStorage (persists across visits).</p>
+<div class="reader-tools">
+      <div class="reader-key-row">
+        <label for="readerAzureKeyInput">Azure Speech key</label>
+        <input type="password" id="readerAzureKeyInput" class="reader-api-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Speech resource key"/>
+        <label for="readerAzureRegionInput">Region</label>
+        <input type="text" id="readerAzureRegionInput" class="reader-api-input reader-region-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g. eastus"/>
+        <button type="button" class="reset reader-save-key" id="saveReaderApiKey">Save</button>
+        <span id="readerKeySavedHint" class="reader-key-hint" aria-live="polite"></span>
+      </div>
+      <div class="reader-actions-row">
+        <button type="button" class="apply read" id="readNews">Read news</button>
+        <button type="button" class="reset stop" id="prevRead" title="Read the previous article" disabled>⏮ Previous</button>
+        <button type="button" class="reset stop" id="stopRead" disabled>Stop</button>
+        <button type="button" class="reset stop" id="nextRead" title="Read the next article" disabled>Next ⏭</button>
+        <div class="reader-speed-wrap" role="group" aria-label="Reading speed">
+          <span class="reader-speed-heading">Speed</span>
+          <button type="button" class="reader-speed-btn" id="readerSpeedDown" title="Slower" aria-label="Slower">−</button>
+          <span id="readerSpeedValue">1.0×</span>
+          <button type="button" class="reader-speed-btn" id="readerSpeedUp" title="Faster" aria-label="Faster">+</button>
+        </div>
+        <p id="readStatus"></p>
+      </div>
+    </div>
+<div class="reader-tools rebuild-tools">
+      <div class="reader-key-row">
+        <label for="rebuildTokenInput">GitHub token</label>
+        <input type="password" id="rebuildTokenInput" class="reader-api-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Token with Actions write access"/>
+        <button type="button" class="reset reader-save-key" id="saveRebuildToken">Save</button>
+        <span id="rebuildTokenHint" class="reader-key-hint" aria-live="polite"></span>
+      </div>
+      <div class="reader-actions-row">
+        <label for="rebuildWorkflow">Digest</label>
+        <select id="rebuildWorkflow" class="reader-api-input rebuild-select"><option value="vietnam-news-daily.yml">Vietnam digest</option><option value="security-news-daily.yml" selected>Security digest</option><option value="weekly-news-digest.yml">Weekly digest</option></select>
+        <button type="button" class="apply read" id="rebuildRun">Rebuild</button>
+        <p id="rebuildStatus"></p>
+      </div>
+    </div>
+    </div>
+<article class="card" data-ts="1795200703000">
+  <header class="card-head">
+    <span class="src">BleepingComputer-fastest on breaking vulns</span>
+    
+    <time datetime="2026-11-20T18:51:43+00:00">2026-11-20T18:51:43+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.bleepingcomputer.com/news/security/bell-canada-says-agentic-hacker-stole-enterprise-customer-data/" rel="noopener noreferrer">Bell Canada says &#x27;agentic&#x27; hacker stole enterprise customer data</a></h2>
+  <section class="block"><h3>Summary</h3><p>Bell Canada has confirmed a security breach occurring on November 17, 2026, involving an &quot;agentic&quot; threat actor. The attackers successfully accessed and exfiltrated enterprise customer data, specifically targeting information from a system used for ordering and provisioning telecommunications circuits.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>The use of &quot;agentic&quot; terminology suggests the potential involvement of autonomous AI tools in the attack chain, which may complicate traditional signature-based detection. Defenders should prioritize auditing access logs for the affected provisioning systems and reviewing identity and access management (IAM) controls to prevent further unauthorized data exfiltration.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.bleepingcomputer.com%2Fnews%2Fsecurity%2Fbell-canada-says-agentic-hacker-stole-enterprise-customer-data%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.bleepingcomputer.com/news/security/bell-canada-says-agentic-hacker-stole-enterprise-customer-data/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.bleepingcomputer.com/news/security/bell-canada-says-agentic-hacker-stole-enterprise-customer-data/" rel="noopener noreferrer">https://www.bleepingcomputer.com/news/security/bell-canada-says-agentic-hacker-stole-enterprise-customer-data/</a></p>
+</article>
+<article class="card" data-ts="1795195800000">
+  <header class="card-head">
+    <span class="src">BleepingComputer-fastest on breaking vulns</span>
+    
+    <time datetime="2026-11-20T17:30:00+00:00">2026-11-20T17:30:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.bleepingcomputer.com/news/security/hackers-use-autonomous-ai-tool-cairn-to-find-zero-day-take-over-server/" rel="noopener noreferrer">Hackers use autonomous AI tool Cairn to find zero-day, take over server</a></h2>
+  <section class="block"><h3>Summary</h3><p>Threat actors utilized the open-source AI penetration-testing framework Cairn to discover a previously unknown vulnerability in a medical imaging application. This exploit allowed the attackers to successfully compromise and take control of the targeted server.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>This incident highlights the dual-use nature of AI-driven security tools, which can be weaponized by adversaries to automate vulnerability discovery. Organizations should treat AI-based security frameworks as potential attack vectors and ensure their applications are hardened against automated scanning and exploitation attempts.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.bleepingcomputer.com%2Fnews%2Fsecurity%2Fhackers-use-autonomous-ai-tool-cairn-to-find-zero-day-take-over-server%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.bleepingcomputer.com/news/security/hackers-use-autonomous-ai-tool-cairn-to-find-zero-day-take-over-server/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.bleepingcomputer.com/news/security/hackers-use-autonomous-ai-tool-cairn-to-find-zero-day-take-over-server/" rel="noopener noreferrer">https://www.bleepingcomputer.com/news/security/hackers-use-autonomous-ai-tool-cairn-to-find-zero-day-take-over-server/</a></p>
+</article>
+<article class="card" data-ts="1795190286000">
+  <header class="card-head">
+    <span class="src">BleepingComputer-fastest on breaking vulns</span>
+    
+    <time datetime="2026-11-20T15:58:06+00:00">2026-11-20T15:58:06+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.bleepingcomputer.com/news/security/vendor-data-breach-exposes-chase-visa-mastercard-customer-info/" rel="noopener noreferrer">Vendor data breach exposes Chase, Visa, Mastercard customer info</a></h2>
+  <section class="block"><h3>Summary</h3><p>J.P. Morgan Chase has confirmed a data breach resulting from a cyberattack on a third-party service provider. The incident exposed sensitive personal information and marketing data belonging to Chase, Visa, and Mastercard customers.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>This breach underscores the significant supply chain risk posed by third-party vendors who hold access to sensitive customer data. Organizations must rigorously assess the security posture of their vendors and enforce strict data handling and access controls to mitigate the impact of downstream compromises.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.bleepingcomputer.com%2Fnews%2Fsecurity%2Fvendor-data-breach-exposes-chase-visa-mastercard-customer-info%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.bleepingcomputer.com/news/security/vendor-data-breach-exposes-chase-visa-mastercard-customer-info/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.bleepingcomputer.com/news/security/vendor-data-breach-exposes-chase-visa-mastercard-customer-info/" rel="noopener noreferrer">https://www.bleepingcomputer.com/news/security/vendor-data-breach-exposes-chase-visa-mastercard-customer-info/</a></p>
+</article>
+<article class="card" data-ts="1795186810000">
+  <header class="card-head">
+    <span class="src">BleepingComputer-fastest on breaking vulns</span>
+    
+    <time datetime="2026-11-20T15:00:10+00:00">2026-11-20T15:00:10+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.bleepingcomputer.com/news/security/still-tracking-company-passwords-in-spreadsheets-youre-flying-blind/" rel="noopener noreferrer">Still tracking company passwords in spreadsheets? You’re flying blind.</a></h2>
+  <section class="block"><h3>Summary</h3><p>This article warns that storing company passwords in spreadsheets creates significant security risks, including a lack of visibility into weak or compromised credentials. It advocates for the adoption of centralized password management systems to improve security and streamline credential sharing.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>Relying on spreadsheets for credential management is a major security vulnerability that facilitates credential stuffing and unauthorized access. Security teams should prioritize migrating to enterprise-grade password managers that offer auditing, rotation enforcement, and secure sharing capabilities.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.bleepingcomputer.com%2Fnews%2Fsecurity%2Fstill-tracking-company-passwords-in-spreadsheets-youre-flying-blind%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.bleepingcomputer.com/news/security/still-tracking-company-passwords-in-spreadsheets-youre-flying-blind/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.bleepingcomputer.com/news/security/still-tracking-company-passwords-in-spreadsheets-youre-flying-blind/" rel="noopener noreferrer">https://www.bleepingcomputer.com/news/security/still-tracking-company-passwords-in-spreadsheets-youre-flying-blind/</a></p>
+</article>
+<article class="card" data-ts="1795180716000">
+  <header class="card-head">
+    <span class="src">BleepingComputer-fastest on breaking vulns</span>
+    
+    <time datetime="2026-11-20T13:18:36+00:00">2026-11-20T13:18:36+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.bleepingcomputer.com/news/microsoft/n-able-says-recent-security-breach-led-to-major-service-outage/" rel="noopener noreferrer">N-able says recent security breach led to major service outage</a></h2>
+  <section class="block"><h3>Summary</h3><p>N-able reported a security breach on one of its servers that resulted in a significant service outage for its Mail Assure and SpamExperts Hosted Cloud services. The disruption impacted customers on a global scale.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>Service outages following a breach often indicate that attackers may have gained high-level access or that the company took systems offline for containment. Defenders should monitor for any follow-up communications regarding data integrity and ensure that any credentials or configurations associated with these services are rotated if compromised.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.bleepingcomputer.com%2Fnews%2Fmicrosoft%2Fn-able-says-recent-security-breach-led-to-major-service-outage%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.bleepingcomputer.com/news/microsoft/n-able-says-recent-security-breach-led-to-major-service-outage/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.bleepingcomputer.com/news/microsoft/n-able-says-recent-security-breach-led-to-major-service-outage/" rel="noopener noreferrer">https://www.bleepingcomputer.com/news/microsoft/n-able-says-recent-security-breach-led-to-major-service-outage/</a></p>
+</article>
+<article class="card" data-ts="1795176868000">
+  <header class="card-head">
+    <span class="src">BleepingComputer-fastest on breaking vulns</span>
+    
+    <time datetime="2026-11-20T12:14:28+00:00">2026-11-20T12:14:28+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.bleepingcomputer.com/news/microsoft/microsoft-now-automatically-installs-windows-11-26h2-on-personal-and-unmanaged-pcs/" rel="noopener noreferrer">Microsoft now automatically installs Windows 11 26H2 on unmanaged devices</a></h2>
+  <section class="block"><h3>Summary</h3><p>Microsoft has begun the automatic rollout of Windows 11 version 26H2 to eligible, unmanaged personal computers. This update process is designed to upgrade systems without requiring manual intervention from IT departments.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>Automatic OS upgrades can introduce compatibility issues or unexpected changes to security configurations on endpoints. While this keeps systems patched, home users and small businesses should verify that their critical applications remain functional after the upgrade to avoid operational downtime.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.bleepingcomputer.com%2Fnews%2Fmicrosoft%2Fmicrosoft-now-automatically-installs-windows-11-26h2-on-personal-and-unmanaged-pcs%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.bleepingcomputer.com/news/microsoft/microsoft-now-automatically-installs-windows-11-26h2-on-personal-and-unmanaged-pcs/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.bleepingcomputer.com/news/microsoft/microsoft-now-automatically-installs-windows-11-26h2-on-personal-and-unmanaged-pcs/" rel="noopener noreferrer">https://www.bleepingcomputer.com/news/microsoft/microsoft-now-automatically-installs-windows-11-26h2-on-personal-and-unmanaged-pcs/</a></p>
+</article>
+<article class="card" data-ts="1795172263000">
+  <header class="card-head">
+    <span class="src">BleepingComputer-fastest on breaking vulns</span>
+    
+    <time datetime="2026-11-20T10:57:43+00:00">2026-11-20T10:57:43+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.bleepingcomputer.com/news/security/f5-releases-emergency-patches-for-critical-big-ip-rce-flaws/" rel="noopener noreferrer">F5 releases emergency patches for critical BIG-IP RCE flaws</a></h2>
+  <section class="block"><h3>Summary</h3><p>F5 has released emergency patches to address five critical vulnerabilities in its BIG-IP products. These flaws could allow attackers to trigger denial-of-service (DoS) conditions or achieve remote code execution (RCE) on affected systems.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>Given the potential for remote code execution, these vulnerabilities pose a high risk to network infrastructure and should be patched immediately. Security teams must prioritize patching F5 BIG-IP appliances and investigate logs for signs of exploitation attempts prior to the update.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.bleepingcomputer.com%2Fnews%2Fsecurity%2Ff5-releases-emergency-patches-for-critical-big-ip-rce-flaws%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.bleepingcomputer.com/news/security/f5-releases-emergency-patches-for-critical-big-ip-rce-flaws/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.bleepingcomputer.com/news/security/f5-releases-emergency-patches-for-critical-big-ip-rce-flaws/" rel="noopener noreferrer">https://www.bleepingcomputer.com/news/security/f5-releases-emergency-patches-for-critical-big-ip-rce-flaws/</a></p>
+</article>
+<article class="card" data-ts="1795166735000">
+  <header class="card-head">
+    <span class="src">BleepingComputer-fastest on breaking vulns</span>
+    
+    <time datetime="2026-11-20T09:25:35+00:00">2026-11-20T09:25:35+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.bleepingcomputer.com/news/microsoft/windows-11-kb5132057-update-released-with-28-changes-and-fixes/" rel="noopener noreferrer">Windows 11 KB5132057 update released with 28 changes and fixes</a></h2>
+  <section class="block"><h3>Summary</h3><p>Microsoft released the KB5132057 preview update for Windows 11, which includes 28 various changes and fixes. Key improvements focus on Windows Search, Windows Hello, and the Run dialog functionality.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>As this is a preview update, it is primarily intended for testing and non-critical environments rather than production deployment. Organizations should evaluate these changes in a lab setting to ensure they do not conflict with existing security policies or software before a wider rollout.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.bleepingcomputer.com%2Fnews%2Fmicrosoft%2Fwindows-11-kb5132057-update-released-with-28-changes-and-fixes%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.bleepingcomputer.com/news/microsoft/windows-11-kb5132057-update-released-with-28-changes-and-fixes/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.bleepingcomputer.com/news/microsoft/windows-11-kb5132057-update-released-with-28-changes-and-fixes/" rel="noopener noreferrer">https://www.bleepingcomputer.com/news/microsoft/windows-11-kb5132057-update-released-with-28-changes-and-fixes/</a></p>
+</article>
+<article class="card" data-ts="1795197440000">
+  <header class="card-head">
+    <span class="src">The Hacker News-high volume, low depth</span>
+    
+    <time datetime="2026-11-20T17:57:20+00:00">2026-11-20T17:57:20+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://thehackernews.com/2026/11/whatsapp-patches-3-security-flaws.html" rel="noopener noreferrer">WhatsApp Patches 3 Security Flaws, Including Android Bug Suspected of Use in Scams</a></h2>
+  <section class="block"><h3>Summary</h3><p>WhatsApp has addressed three security vulnerabilities, including an Android-specific flaw (CVE-2026-23871) suspected of being used in scam campaigns to reveal user IP addresses. Other patches cover an SQL injection vulnerability (CVE-2026-102769) and a trust-validation issue in Meta AI&#x27;s infrastructure (CVE-2026-44908).</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>The exploitation of CVE-2026-23871 in scam campaigns highlights the need for users to keep messaging apps updated to prevent metadata leakage. Defenders should ensure all mobile devices in their fleet are running the latest version of WhatsApp to mitigate these risks, particularly given the potential for credential or data theft via the SQL injection flaw.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fthehackernews.com%2F2026%2F11%2Fwhatsapp-patches-3-security-flaws.html" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://thehackernews.com/2026/11/whatsapp-patches-3-security-flaws.html" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://thehackernews.com/2026/11/whatsapp-patches-3-security-flaws.html" rel="noopener noreferrer">https://thehackernews.com/2026/11/whatsapp-patches-3-security-flaws.html</a></p>
+</article>
+<article class="card" data-ts="1795193896000">
+  <header class="card-head">
+    <span class="src">The Hacker News-high volume, low depth</span>
+    
+    <time datetime="2026-11-20T16:58:16+00:00">2026-11-20T16:58:16+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://thehackernews.com/2026/11/bazuka-android-malware-uses-fake-screen.html" rel="noopener noreferrer">Bazuka Android Malware Uses Fake Screen Overlays to Hide Credential Theft and Device Control</a></h2>
+  <section class="block"><h3>Summary</h3><p>Researchers have identified &quot;Bazuka,&quot; a sophisticated Android malware framework that integrates large language models (LLMs) to assist operators in managing infections and scoring potential victims. The malware employs advanced techniques such as fake screen overlays, keylogging, and SMS interception to steal credentials and control devices.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>The integration of AI into malware frameworks like Bazuka represents a significant evolution in threat actor capabilities, allowing for more efficient victim targeting and management. Security teams should implement robust mobile device management (MDM) policies, restrict sideloading of applications, and educate users on the risks of downloading apps from unofficial sources.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fthehackernews.com%2F2026%2F11%2Fbazuka-android-malware-uses-fake-screen.html" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://thehackernews.com/2026/11/bazuka-android-malware-uses-fake-screen.html" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://thehackernews.com/2026/11/bazuka-android-malware-uses-fake-screen.html" rel="noopener noreferrer">https://thehackernews.com/2026/11/bazuka-android-malware-uses-fake-screen.html</a></p>
+</article>
+<article class="card" data-ts="1795177200000">
+  <header class="card-head">
+    <span class="src">The Hacker News-high volume, low depth</span>
+    
+    <time datetime="2026-11-20T12:20:00+00:00">2026-11-20T12:20:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://thehackernews.com/2026/11/new-linux-kvm-flaw-cve-2026-99312-lets.html" rel="noopener noreferrer">Linux KVM Flaw CVE-2026-99312 Lets Guest VMs Access Host Memory on AMD Hosts</a></h2>
+  <section class="block"><h3>Summary</h3><p>A critical vulnerability (CVE-2026-99312) in the Linux KVM hypervisor allows guest virtual machines on AMD hosts with nested virtualization enabled to access host memory. The flaw stems from an improper reset of memory management states, potentially allowing an attacker to read or modify host memory.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>This vulnerability is highly critical for cloud providers and organizations running multi-tenant virtualized environments on AMD hardware. Administrators should prioritize patching the host kernel immediately or, as a temporary mitigation, disable nested virtualization to prevent potential cross-VM data access.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fthehackernews.com%2F2026%2F11%2Fnew-linux-kvm-flaw-cve-2026-99312-lets.html" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://thehackernews.com/2026/11/new-linux-kvm-flaw-cve-2026-99312-lets.html" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://thehackernews.com/2026/11/new-linux-kvm-flaw-cve-2026-99312-lets.html" rel="noopener noreferrer">https://thehackernews.com/2026/11/new-linux-kvm-flaw-cve-2026-99312-lets.html</a></p>
+</article>
+<article class="card" data-ts="1795176000000">
+  <header class="card-head">
+    <span class="src">The Hacker News-high volume, low depth</span>
+    
+    <time datetime="2026-11-20T12:00:00+00:00">2026-11-20T12:00:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://thehackernews.com/2026/11/the-path-to-ai-autonomy-in-soc.html" rel="noopener noreferrer">The Path to AI Autonomy in the SOC</a></h2>
+  <section class="block"><h3>Summary</h3><p>This article discusses the increasing trend of integrating AI agents into Security Operations Centers (SOCs) and provides a framework for determining appropriate levels of autonomy. It categorizes autonomy into five levels, ranging from operator-led to fully autonomous, based on factors like reversibility, blast radius, and evidence quality.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>Security leaders should adopt a structured, risk-based approach to AI integration rather than treating autonomy as an all-or-nothing decision. By mapping specific SOC tasks to appropriate autonomy levels, organizations can safely leverage AI to improve efficiency while maintaining necessary human oversight for high-impact actions.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fthehackernews.com%2F2026%2F11%2Fthe-path-to-ai-autonomy-in-soc.html" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://thehackernews.com/2026/11/the-path-to-ai-autonomy-in-soc.html" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://thehackernews.com/2026/11/the-path-to-ai-autonomy-in-soc.html" rel="noopener noreferrer">https://thehackernews.com/2026/11/the-path-to-ai-autonomy-in-soc.html</a></p>
+</article>
+<article class="card" data-ts="1795171102000">
+  <header class="card-head">
+    <span class="src">The Hacker News-high volume, low depth</span>
+    
+    <time datetime="2026-11-20T10:38:22+00:00">2026-11-20T10:38:22+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://thehackernews.com/2026/11/sonicwall-warns-gen-6-firewalls-wont.html" rel="noopener noreferrer">SonicWall Warns Gen 6 Firewalls Won&#x27;t Get Security Patches, Even for Critical Flaws</a></h2>
+  <section class="block"><h3>Summary</h3><p>SonicWall has issued an urgent warning for users of its Generation 6 firewalls, stating these devices will no longer receive security patches, even for critical vulnerabilities. The company advises immediate retirement and replacement of these units, particularly those exposed to the internet, due to increased risks from AI-assisted exploitation.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>Defenders must prioritize inventorying and decommissioning these legacy devices, as they are now permanent liabilities. Until replacement is complete, organizations should implement strict compensating controls, such as disabling WAN management and restricting remote access, to mitigate the high risk of compromise.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fthehackernews.com%2F2026%2F11%2Fsonicwall-warns-gen-6-firewalls-wont.html" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://thehackernews.com/2026/11/sonicwall-warns-gen-6-firewalls-wont.html" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://thehackernews.com/2026/11/sonicwall-warns-gen-6-firewalls-wont.html" rel="noopener noreferrer">https://thehackernews.com/2026/11/sonicwall-warns-gen-6-firewalls-wont.html</a></p>
+</article>
+<article class="card" data-ts="1795170770000">
+  <header class="card-head">
+    <span class="src">The Hacker News-high volume, low depth</span>
+    
+    <time datetime="2026-11-20T10:32:50+00:00">2026-11-20T10:32:50+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://thehackernews.com/2026/11/hackers-exploit-critical-cisco.html" rel="noopener noreferrer">Hackers Exploit Critical Cisco Expressway Flaw, Breach Four Devices and Reach Internal Network</a></h2>
+  <section class="block"><h3>Summary</h3><p>A critical vulnerability (CVE-2026-76466) in Cisco Expressway is being actively exploited in the wild to gain root-level remote command execution. Attackers have used this flaw to compromise internet-facing devices and move laterally into internal network clusters, potentially using AI-assisted scripts to facilitate their operations.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>This is a high-priority patch event; organizations running affected Cisco Expressway versions (X14 and earlier, X15.5.3 and earlier) must update immediately. Defenders should hunt for indicators of compromise, such as specific IP addresses and unauthorized Python scripts, and ensure proper network segmentation to limit lateral movement.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fthehackernews.com%2F2026%2F11%2Fhackers-exploit-critical-cisco.html" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://thehackernews.com/2026/11/hackers-exploit-critical-cisco.html" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://thehackernews.com/2026/11/hackers-exploit-critical-cisco.html" rel="noopener noreferrer">https://thehackernews.com/2026/11/hackers-exploit-critical-cisco.html</a></p>
+</article>
+<article class="card" data-ts="1795167495000">
+  <header class="card-head">
+    <span class="src">The Hacker News-high volume, low depth</span>
+    
+    <time datetime="2026-11-20T09:38:15+00:00">2026-11-20T09:38:15+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://thehackernews.com/2026/11/china-linked-hackers-exploit-critical.html" rel="noopener noreferrer">China-Linked Hackers Exploit Critical VMware vCenter Zero-Day to Gain Admin Access and Steal Data</a></h2>
+  <section class="block"><h3>Summary</h3><p>The threat group Armory Castle has been linked to the exploitation of a critical authentication bypass vulnerability (CVE-2026-123890) in VMware vCenter Server. The attackers utilized a custom Golang-based utility called BONESAW to gain administrative access, exfiltrate data, and deploy various backdoors, including one that leverages Slack for command-and-control.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>This is a critical vulnerability requiring immediate patching across VMware environments. Defenders should audit for unauthorized administrative accounts and suspicious SSH activity on vCenter appliances, as the attackers demonstrated sophisticated lateral movement and persistence capabilities.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fthehackernews.com%2F2026%2F11%2Fchina-linked-hackers-exploit-critical.html" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://thehackernews.com/2026/11/china-linked-hackers-exploit-critical.html" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://thehackernews.com/2026/11/china-linked-hackers-exploit-critical.html" rel="noopener noreferrer">https://thehackernews.com/2026/11/china-linked-hackers-exploit-critical.html</a></p>
+</article>
+<article class="card" data-ts="1795210476000">
+  <header class="card-head">
+    <span class="src">The Record-nation-state, policy, best reporting</span>
+    
+    <time datetime="2026-11-20T21:34:36+00:00">2026-11-20T21:34:36+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://therecord.media/west-virginia-legislature-cyberattack" rel="noopener noreferrer">West Virginia Legislature hit with cyber incident affecting IT systems</a></h2>
+  <section class="block"><h3>Summary</h3><p>The West Virginia Legislature is currently responding to a cyberattack that has disrupted its website and internal IT systems. Authorities have taken systems offline to contain the incident and are working with external cybersecurity specialists, though no specific group has claimed responsibility.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>While the full scope remains under investigation, this incident highlights the ongoing threat to government infrastructure. Defenders in similar sectors should review incident response plans and ensure robust backups and segmentation are in place to minimize the impact of potential ransomware or service-disrupting attacks.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Ftherecord.media%2Fwest-virginia-legislature-cyberattack" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://therecord.media/west-virginia-legislature-cyberattack" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://therecord.media/west-virginia-legislature-cyberattack" rel="noopener noreferrer">https://therecord.media/west-virginia-legislature-cyberattack</a></p>
+</article>
+<article class="card" data-ts="1795206300000">
+  <header class="card-head">
+    <span class="src">The Record-nation-state, policy, best reporting</span>
+    
+    <time datetime="2026-11-20T20:25:00+00:00">2026-11-20T20:25:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://therecord.media/chinese-open-weight-AI-use-by-US-companies-house-investigation" rel="noopener noreferrer">US companies’ use of Chinese open weight AI draws rebuke from House chairmen</a></h2>
+  <section class="block"><h3>Summary</h3><p>A new congressional report warns American companies against integrating Chinese-developed open-weight AI models into their technology stacks. The report cautions that these models pose significant national security risks, including potential data harvesting and long-term reliance on foreign technology that could be difficult to remove later.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>Organizations should evaluate their supply chain and AI dependencies, prioritizing security and provenance when selecting AI models. Security teams should treat third-party AI integrations as potential vectors for data exfiltration and consider the long-term strategic risks of adopting models from adversarial nations.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Ftherecord.media%2Fchinese-open-weight-AI-use-by-US-companies-house-investigation" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://therecord.media/chinese-open-weight-AI-use-by-US-companies-house-investigation" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://therecord.media/chinese-open-weight-AI-use-by-US-companies-house-investigation" rel="noopener noreferrer">https://therecord.media/chinese-open-weight-AI-use-by-US-companies-house-investigation</a></p>
+</article>
+<article class="card" data-ts="1795203120000">
+  <header class="card-head">
+    <span class="src">The Record-nation-state, policy, best reporting</span>
+    
+    <time datetime="2026-11-20T19:32:00+00:00">2026-11-20T19:32:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://therecord.media/container-store-restores-systems-cyberattack" rel="noopener noreferrer">Container Store restores systems after cyberattack</a></h2>
+  <section class="block"><h3>Summary</h3><p>The Container Store is recovering from a cyberattack that forced the temporary shutdown of its online ordering and impacted in-store transaction processing. While the company has restored its systems, it is investigating the incident, which has been linked to the cybercriminal group n0n.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>Retailers should be vigilant against ransomware and extortion groups that target transaction processing systems. Defenders should monitor for unauthorized access to payment-related infrastructure and ensure that incident response protocols include rapid containment of customer-facing services to prevent data exfiltration.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Ftherecord.media%2Fcontainer-store-restores-systems-cyberattack" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://therecord.media/container-store-restores-systems-cyberattack" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://therecord.media/container-store-restores-systems-cyberattack" rel="noopener noreferrer">https://therecord.media/container-store-restores-systems-cyberattack</a></p>
+</article>
+<article class="card" data-ts="1795195800000">
+  <header class="card-head">
+    <span class="src">The Record-nation-state, policy, best reporting</span>
+    
+    <time datetime="2026-11-20T17:30:00+00:00">2026-11-20T17:30:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://therecord.media/amazon-research-cairn-ai-university-attacks-possible-zero-day" rel="noopener noreferrer">Amazon says Chinese hackers used Cairn AI tool to discover apparent zero-day during attack on university</a></h2>
+  <section class="block"><h3>Summary</h3><p>Amazon’s threat intelligence team reported that Chinese hackers utilized an autonomous AI penetration-testing framework called Cairn to discover and exploit a zero-day vulnerability in an open-source medical imaging application. The AI agents were able to plan and execute attacks against universities in East Asia without human intervention, highlighting the speed and efficiency of AI-driven exploitation.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>This incident underscores the rapid evolution of AI-powered offensive tools capable of identifying and exploiting vulnerabilities at machine speed. Defenders must accelerate their vulnerability management and patching cycles, as traditional manual triage may be too slow to counter autonomous agents that operate continuously.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Ftherecord.media%2Famazon-research-cairn-ai-university-attacks-possible-zero-day" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://therecord.media/amazon-research-cairn-ai-university-attacks-possible-zero-day" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://therecord.media/amazon-research-cairn-ai-university-attacks-possible-zero-day" rel="noopener noreferrer">https://therecord.media/amazon-research-cairn-ai-university-attacks-possible-zero-day</a></p>
+</article>
+<article class="card" data-ts="1795190760000">
+  <header class="card-head">
+    <span class="src">The Record-nation-state, policy, best reporting</span>
+    
+    <time datetime="2026-11-20T16:06:00+00:00">2026-11-20T16:06:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://therecord.media/nsa-resumes-normal-operations-following-internal-disruptions" rel="noopener noreferrer">NSA resumes normal operations following internal network disruptions</a></h2>
+  <section class="block"><h3>Summary</h3><p>The National Security Agency has resumed normal operations following a multi-day disruption to its internal communications network, NSANet. The outage was attributed to issues arising from patching a commonly used programming language, rather than a cyberattack.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>This incident serves as a reminder that routine maintenance and patching can inadvertently cause significant operational downtime. Organizations should ensure that patch management processes include thorough testing in staging environments to identify potential compatibility issues before deploying updates to critical production systems.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Ftherecord.media%2Fnsa-resumes-normal-operations-following-internal-disruptions" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://therecord.media/nsa-resumes-normal-operations-following-internal-disruptions" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://therecord.media/nsa-resumes-normal-operations-following-internal-disruptions" rel="noopener noreferrer">https://therecord.media/nsa-resumes-normal-operations-following-internal-disruptions</a></p>
+</article>
+<article class="card" data-ts="1795208607000">
+  <header class="card-head">
+    <span class="src">Dark Reading</span>
+    
+    <time datetime="2026-11-20T21:03:27+00:00">2026-11-20T21:03:27+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.darkreading.com/cyberattacks-data-breaches/china-armory-castle-vmware-vcenter-zero-day" rel="noopener noreferrer">China&#x27;s &#x27;Armory Castle&#x27; Lays Siege to VMware vCenter Zero-Day</a></h2>
+  <section class="block"><h3>Summary</h3><p>This article briefly notes that the China-nexus threat group Armory Castle likely possessed a zero-day exploit for VMware vCenter Server during previous security update cycles. It highlights the group&#x27;s ongoing focus on targeting critical infrastructure through sophisticated vulnerability exploitation.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>This reinforces the need for organizations to assume that sophisticated threat actors may have access to undisclosed vulnerabilities. Defenders should prioritize defense-in-depth strategies that do not rely solely on patching, such as network segmentation and robust logging, to detect and contain potential breaches.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.darkreading.com%2Fcyberattacks-data-breaches%2Fchina-armory-castle-vmware-vcenter-zero-day" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.darkreading.com/cyberattacks-data-breaches/china-armory-castle-vmware-vcenter-zero-day" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.darkreading.com/cyberattacks-data-breaches/china-armory-castle-vmware-vcenter-zero-day" rel="noopener noreferrer">https://www.darkreading.com/cyberattacks-data-breaches/china-armory-castle-vmware-vcenter-zero-day</a></p>
+</article>
+<article class="card" data-ts="1795199740000">
+  <header class="card-head">
+    <span class="src">Dark Reading</span>
+    
+    <time datetime="2026-11-20T18:35:40+00:00">2026-11-20T18:35:40+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.darkreading.com/cybersecurity-operations/security-words-matter" rel="noopener noreferrer">In Security, Words Matter as Much as Tools, Maybe More</a></h2>
+  <section class="block"><h3>Summary</h3><p>This article emphasizes that clear and disciplined communication is a critical defense capability for cybersecurity leaders. It argues that effective messaging is just as important as technical tools when managing security across an enterprise.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>Security teams should prioritize developing communication skills to better articulate risk and security posture to non-technical stakeholders. Improving the clarity of security documentation and incident reporting can lead to better organizational alignment and more effective risk management.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.darkreading.com%2Fcybersecurity-operations%2Fsecurity-words-matter" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.darkreading.com/cybersecurity-operations/security-words-matter" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.darkreading.com/cybersecurity-operations/security-words-matter" rel="noopener noreferrer">https://www.darkreading.com/cybersecurity-operations/security-words-matter</a></p>
+</article>
+<article class="card" data-ts="1795194244000">
+  <header class="card-head">
+    <span class="src">Dark Reading</span>
+    
+    <time datetime="2026-11-20T17:04:04+00:00">2026-11-20T17:04:04+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.darkreading.com/cyber-risk/what-we-missed-nvidia-ceo-scandal-rocks-ai-industry" rel="noopener noreferrer">What We Missed: Nvidia CEO Scandal Rocks AI Industry</a></h2>
+  <section class="block"><h3>Summary</h3><p>This article provides a brief overview of recent cybersecurity news topics discussed by Dark Reading editors, including a reported scandal involving the Nvidia CEO and a recent Microsoft cloud outage. The content serves as a summary of industry events that were not covered in depth elsewhere.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>Given the limited information, defenders should rely on official advisories from vendors like Microsoft regarding service outages. This highlights the importance of monitoring multiple, reliable sources for timely information on major industry disruptions and executive-level security news.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.darkreading.com%2Fcyber-risk%2Fwhat-we-missed-nvidia-ceo-scandal-rocks-ai-industry" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.darkreading.com/cyber-risk/what-we-missed-nvidia-ceo-scandal-rocks-ai-industry" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.darkreading.com/cyber-risk/what-we-missed-nvidia-ceo-scandal-rocks-ai-industry" rel="noopener noreferrer">https://www.darkreading.com/cyber-risk/what-we-missed-nvidia-ceo-scandal-rocks-ai-industry</a></p>
+</article>
+<article class="card" data-ts="1795190462000">
+  <header class="card-head">
+    <span class="src">SecurityWeek</span>
+    
+    <time datetime="2026-11-20T16:01:02+00:00">2026-11-20T16:01:02+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.securityweek.com/whatsapp-fixes-flaw-uncovered-while-disrupting-scam-campaign/" rel="noopener noreferrer">WhatsApp Fixes Flaw Uncovered While Disrupting Scam Campaign</a></h2>
+  <section class="block"><h3>Summary</h3><p>WhatsApp has patched a vulnerability (CVE-2026-23871) that allowed attackers to potentially reveal a user&#x27;s IP address through crafted ad-reply messages. The flaw was discovered by WhatsApp’s security team during an investigation into a scam campaign, and the company also addressed two other vulnerabilities related to file deletion and certificate verification.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>Users and businesses should ensure their WhatsApp applications are updated to the latest versions to mitigate these risks. Defenders should be aware that attackers are actively using platform-specific features, such as &quot;Click to WhatsApp&quot; ads, to facilitate scams and should educate users on the risks of interacting with unsolicited messages.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.securityweek.com%2Fwhatsapp-fixes-flaw-uncovered-while-disrupting-scam-campaign%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.securityweek.com/whatsapp-fixes-flaw-uncovered-while-disrupting-scam-campaign/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.securityweek.com/whatsapp-fixes-flaw-uncovered-while-disrupting-scam-campaign/" rel="noopener noreferrer">https://www.securityweek.com/whatsapp-fixes-flaw-uncovered-while-disrupting-scam-campaign/</a></p>
+</article>
+<article class="card" data-ts="1795186583000">
+  <header class="card-head">
+    <span class="src">SecurityWeek</span>
+    
+    <time datetime="2026-11-20T14:56:23+00:00">2026-11-20T14:56:23+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.securityweek.com/in-other-news-norwegian-energy-firm-cyberattacks-supercomputer-hack-new-nightmare-eclipse-exploit/" rel="noopener noreferrer">In Other News: Norwegian Energy Firm Cyberattacks, Supercomputer Hack, New Nightmare Eclipse Exploit</a></h2>
+  <section class="block"><h3>Summary</h3><p>This weekly roundup covers several significant incidents, including a data breach at Infoblox via a migration vendor, a supercomputer intrusion at Japan&#x27;s Riken institute, and a zero-day lock screen escape for Windows 11 dubbed &#x27;FastUnlock.&#x27; Additionally, it notes the EU&#x27;s sanctioning of the NoName057(16) hacking group and reports on various ransomware-related arrests and data exposures at Rakuten Securities and Norwegian energy firms.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>Defenders should prioritize patching the Windows 11 zero-day if physical access is a risk, as it bypasses lock screens. The recurring theme of third-party vendor compromises (Infoblox) and test environment exposures (Rakuten) highlights the critical need for strict supply chain security and rigorous isolation of non-production environments.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.securityweek.com%2Fin-other-news-norwegian-energy-firm-cyberattacks-supercomputer-hack-new-nightmare-eclipse-exploit%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.securityweek.com/in-other-news-norwegian-energy-firm-cyberattacks-supercomputer-hack-new-nightmare-eclipse-exploit/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.securityweek.com/in-other-news-norwegian-energy-firm-cyberattacks-supercomputer-hack-new-nightmare-eclipse-exploit/" rel="noopener noreferrer">https://www.securityweek.com/in-other-news-norwegian-energy-firm-cyberattacks-supercomputer-hack-new-nightmare-eclipse-exploit/</a></p>
+</article>
+<article class="card" data-ts="1795178335000">
+  <header class="card-head">
+    <span class="src">SecurityWeek</span>
+    
+    <time datetime="2026-11-20T12:38:55+00:00">2026-11-20T12:38:55+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.securityweek.com/industry-reactions-to-major-outages-and-ai-patching-questions-feedback-friday/" rel="noopener noreferrer">Industry Reactions to Major Outages and AI Patching Debate: Feedback Friday</a></h2>
+  <section class="block"><h3>Summary</h3><p>Industry experts are debating whether the rapid pace of AI-accelerated vulnerability discovery and subsequent patching is causing critical infrastructure instability. While recent major outages at Microsoft, the FAA, and the NSA were officially attributed to software defects or maintenance, experts warn that compressed patch cycles and &#x27;hurried&#x27; updates increase the risk of operational failure.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>Organizations must balance the urgency of patching with the stability of their systems by implementing rigorous testing and rollback plans. Security teams should treat &#x27;patching&#x27; as a high-risk change management process rather than a purely defensive action, ensuring that recovery procedures are tested before deployment.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.securityweek.com%2Findustry-reactions-to-major-outages-and-ai-patching-questions-feedback-friday%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.securityweek.com/industry-reactions-to-major-outages-and-ai-patching-questions-feedback-friday/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.securityweek.com/industry-reactions-to-major-outages-and-ai-patching-questions-feedback-friday/" rel="noopener noreferrer">https://www.securityweek.com/industry-reactions-to-major-outages-and-ai-patching-questions-feedback-friday/</a></p>
+</article>
+<article class="card" data-ts="1795174611000">
+  <header class="card-head">
+    <span class="src">SecurityWeek</span>
+    
+    <time datetime="2026-11-20T11:36:51+00:00">2026-11-20T11:36:51+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.securityweek.com/sbc-medical-group-data-breach-impacts-over-2-million/" rel="noopener noreferrer">SBC Medical Group Data Breach Impacts Over 2 Million</a></h2>
+  <section class="block"><h3>Summary</h3><p>SBC Medical Group reported a significant data breach affecting over 2 million individuals in Japan after hackers accessed an online management platform. The stolen data includes extensive personal and medical information, such as patient card numbers, reservation details, and, in a small number of cases, credit card information, alongside employee records.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>This incident underscores the high risk associated with centralized management platforms that aggregate data from multiple clinics. Organizations managing third-party or multi-client infrastructure must implement strict access controls and audit logs to detect unauthorized database access early.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.securityweek.com%2Fsbc-medical-group-data-breach-impacts-over-2-million%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.securityweek.com/sbc-medical-group-data-breach-impacts-over-2-million/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.securityweek.com/sbc-medical-group-data-breach-impacts-over-2-million/" rel="noopener noreferrer">https://www.securityweek.com/sbc-medical-group-data-breach-impacts-over-2-million/</a></p>
+</article>
+<article class="card" data-ts="1795171902000">
+  <header class="card-head">
+    <span class="src">SecurityWeek</span>
+    
+    <time datetime="2026-11-20T10:51:42+00:00">2026-11-20T10:51:42+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.securityweek.com/european-commission-confirms-ai-assisted-cyberattack-disrupted-services/" rel="noopener noreferrer">European Commission Confirms AI-Assisted Cyberattack Disrupted Services</a></h2>
+  <section class="block"><h3>Summary</h3><p>The European Commission confirmed that an AI-assisted cyberattack forced the temporary shutdown of several internal services, including HR and medical reimbursement platforms. While the Commission reported no evidence of a data breach, the incident highlights the growing use of AI frameworks, such as the penetration-testing tool Artex, by threat actors to conduct scalable, automated attacks.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>The use of AI-powered frameworks like Artex by adversaries necessitates a shift toward more proactive, automated defense mechanisms. Defenders should assume that attackers are using similar AI tools for reconnaissance and exploitation, making rapid incident response and service isolation capabilities essential.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.securityweek.com%2Feuropean-commission-confirms-ai-assisted-cyberattack-disrupted-services%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.securityweek.com/european-commission-confirms-ai-assisted-cyberattack-disrupted-services/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.securityweek.com/european-commission-confirms-ai-assisted-cyberattack-disrupted-services/" rel="noopener noreferrer">https://www.securityweek.com/european-commission-confirms-ai-assisted-cyberattack-disrupted-services/</a></p>
+</article>
+<article class="card" data-ts="1795221399000">
+  <header class="card-head">
+    <span class="src">Krebs on Security-investigative, infrequent</span>
+    
+    <time datetime="2026-11-21T00:36:39+00:00">2026-11-21T00:36:39+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://krebsonsecurity.com/2026/11/cto-of-ransomwarehelp-indicted-for-wire-fraud/" rel="noopener noreferrer">CTO of ‘RansomwareHelp’ Indicted for Wire Fraud</a></h2>
+  <section class="block"><h3>Summary</h3><p>The CTO of RansomwareHelp, a company that claimed to use proprietary cryptographic tools to recover data from ransomware, has been indicted for wire fraud. An FBI sting revealed the company was simply paying attackers for decryption keys and charging victims a significant markup, while also using remote access software to delete ransom notes to prevent victims from negotiating directly.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>This case serves as a stark warning to organizations to vet third-party incident response and recovery firms thoroughly. Organizations should avoid vendors that insist on &#x27;proprietary&#x27; recovery methods or demand unrestricted remote access to their networks, as these are significant red flags for potential fraud.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fkrebsonsecurity.com%2F2026%2F11%2Fcto-of-ransomwarehelp-indicted-for-wire-fraud%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://krebsonsecurity.com/2026/11/cto-of-ransomwarehelp-indicted-for-wire-fraud/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://krebsonsecurity.com/2026/11/cto-of-ransomwarehelp-indicted-for-wire-fraud/" rel="noopener noreferrer">https://krebsonsecurity.com/2026/11/cto-of-ransomwarehelp-indicted-for-wire-fraud/</a></p>
+</article>
+<article class="card" data-ts="1795212252000">
+  <header class="card-head">
+    <span class="src">Schneier</span>
+    
+    <time datetime="2026-11-20T22:04:12+00:00">2026-11-20T22:04:12+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.schneier.com/blog/archives/2026/11/friday-squid-blogging-the-largest-squid-ever-filmed.html" rel="noopener noreferrer">Friday Squid Blogging: The Largest Squid Ever Filmed</a></h2>
+  <section class="block"><h3>Summary</h3><p>This post discusses the filming of the largest squid ever recorded near Japan’s Ogasawara Islands in 2006. The author uses the post as an open thread for discussing cybersecurity news.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>No actionable cybersecurity intelligence is provided in this post.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.schneier.com%2Fblog%2Farchives%2F2026%2F11%2Ffriday-squid-blogging-the-largest-squid-ever-filmed.html" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.schneier.com/blog/archives/2026/11/friday-squid-blogging-the-largest-squid-ever-filmed.html" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.schneier.com/blog/archives/2026/11/friday-squid-blogging-the-largest-squid-ever-filmed.html" rel="noopener noreferrer">https://www.schneier.com/blog/archives/2026/11/friday-squid-blogging-the-largest-squid-ever-filmed.html</a></p>
+</article>
+<article class="card" data-ts="1795176286000">
+  <header class="card-head">
+    <span class="src">Schneier</span>
+    
+    <time datetime="2026-11-20T12:04:46+00:00">2026-11-20T12:04:46+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.schneier.com/blog/archives/2026/11/opening-a-400-year-old-cryptex.html" rel="noopener noreferrer">Opening a 400-Year-Old Cryptex</a></h2>
+  <section class="block"><h3>Summary</h3><p>Researchers successfully used CT scanning technology to decipher and open a 400-year-old cryptex padlock. The post also mentions the availability of modern USB-drive versions of the device.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>This is a historical and technological curiosity with no direct implications for modern cybersecurity defense.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.schneier.com%2Fblog%2Farchives%2F2026%2F11%2Fopening-a-400-year-old-cryptex.html" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.schneier.com/blog/archives/2026/11/opening-a-400-year-old-cryptex.html" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.schneier.com/blog/archives/2026/11/opening-a-400-year-old-cryptex.html" rel="noopener noreferrer">https://www.schneier.com/blog/archives/2026/11/opening-a-400-year-old-cryptex.html</a></p>
+</article>
+<article class="card" data-ts="1795194000000">
+  <header class="card-head">
+    <span class="src">Microsoft MSTIC</span>
+    
+    <time datetime="2026-11-20T17:00:00+00:00">2026-11-20T17:00:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.microsoft.com/en-us/security/blog/2026/11/20/microsoft-named-a-leader-in-the-2026-gartner-magic-quadrant-for-siem/" rel="noopener noreferrer">Microsoft named a Leader in the 2026 Gartner® Magic Quadrant™ for SIEM</a></h2>
+  <section class="block"><h3>Summary</h3><p>Microsoft highlights its recognition as a leader in the 2026 Gartner Magic Quadrant for SIEM, emphasizing the capabilities of Microsoft Sentinel. The blog post also promotes the Integrated Security Operations Center (ISOC) in Microsoft Defender, which aims to unify SIEM and XDR for an &#x27;agentic&#x27; approach to security operations.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>This is vendor-provided content detailing their strategic direction toward agentic security operations. Security teams should evaluate whether integrating SIEM and XDR into a single platform aligns with their operational needs for unified visibility and automated response.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.microsoft.com%2Fen-us%2Fsecurity%2Fblog%2F2026%2F11%2F20%2Fmicrosoft-named-a-leader-in-the-2026-gartner-magic-quadrant-for-siem%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.microsoft.com/en-us/security/blog/2026/11/20/microsoft-named-a-leader-in-the-2026-gartner-magic-quadrant-for-siem/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.microsoft.com/en-us/security/blog/2026/11/20/microsoft-named-a-leader-in-the-2026-gartner-magic-quadrant-for-siem/" rel="noopener noreferrer">https://www.microsoft.com/en-us/security/blog/2026/11/20/microsoft-named-a-leader-in-the-2026-gartner-magic-quadrant-for-siem/</a></p>
+</article>
+<article class="card" data-ts="1795191300000">
+  <header class="card-head">
+    <span class="src">Infosecurity Magazine</span>
+    
+    <time datetime="2026-11-20T16:15:00+00:00">2026-11-20T16:15:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.infosecurity-magazine.com/news/jpmorgan-data-breach-third-party/" rel="noopener noreferrer">JPMorgan Confirms Customer Data Breach Following Third-Party Compromise</a></h2>
+  <section class="block"><h3>Summary</h3><p>JPMorgan Chase, along with Visa and Mastercard, confirmed data breaches resulting from a compromise of third-party vendors. The N0n ransomware group claimed responsibility for the leaks, which included customer email addresses and other non-payment information, after the financial institutions reportedly failed to meet extortion demands.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>This incident highlights the persistent risk of third-party marketing and loyalty program vendors being used as entry points to sensitive customer data. Financial institutions must enforce stricter security requirements on all third-party partners, regardless of whether they handle core payment processing.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.infosecurity-magazine.com%2Fnews%2Fjpmorgan-data-breach-third-party%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.infosecurity-magazine.com/news/jpmorgan-data-breach-third-party/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.infosecurity-magazine.com/news/jpmorgan-data-breach-third-party/" rel="noopener noreferrer">https://www.infosecurity-magazine.com/news/jpmorgan-data-breach-third-party/</a></p>
+</article>
+<article class="card" data-ts="1795184100000">
+  <header class="card-head">
+    <span class="src">Infosecurity Magazine</span>
+    
+    <time datetime="2026-11-20T14:15:00+00:00">2026-11-20T14:15:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.infosecurity-magazine.com/news/ransomware-recovery-20-days/" rel="noopener noreferrer">Ransomware Recovery Takes 20 Days for the Typical Victim, Report Finds</a></h2>
+  <section class="block"><h3>Summary</h3><p>A new report from Rubrik Zero Labs indicates that the median time for ransomware recovery is 20 days, with nearly a third of victims requiring over six weeks to return to normal operations. The report also notes that attackers are increasingly targeting backup environments to hinder recovery efforts and are focusing more on data theft than encryption.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>Defenders must prioritize the security of backup infrastructure, as it is now a primary target for ransomware groups. Organizations should implement immutable backups and monitor backup management consoles for unauthorized access to ensure recovery remains a viable option.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.infosecurity-magazine.com%2Fnews%2Fransomware-recovery-20-days%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.infosecurity-magazine.com/news/ransomware-recovery-20-days/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.infosecurity-magazine.com/news/ransomware-recovery-20-days/" rel="noopener noreferrer">https://www.infosecurity-magazine.com/news/ransomware-recovery-20-days/</a></p>
+</article>
+<article class="card" data-ts="1795175700000">
+  <header class="card-head">
+    <span class="src">Infosecurity Magazine</span>
+    
+    <time datetime="2026-11-20T11:55:00+00:00">2026-11-20T11:55:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.infosecurity-magazine.com/news/mail-bombing-attacks-it-helpdesk/" rel="noopener noreferrer">Mail Bombing Attacks Fuel IT Helpdesk Impersonation Scams</a></h2>
+  <section class="block"><h3>Summary</h3><p>Threat actors are using &#x27;mail bombing&#x27;—flooding inboxes with thousands of automated subscription emails—to obscure phishing alerts and distract users. This campaign is often followed by vishing calls from attackers impersonating IT helpdesk staff who offer to &#x27;fix&#x27; the email flood while actually attempting to compromise the user&#x27;s account.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>Security teams should train employees to recognize that IT support will not call to &#x27;fix&#x27; an email flood by asking for credentials or remote access. Monitoring for sudden, massive surges in email volume from legitimate subscription services can help identify these campaigns early.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.infosecurity-magazine.com%2Fnews%2Fmail-bombing-attacks-it-helpdesk%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.infosecurity-magazine.com/news/mail-bombing-attacks-it-helpdesk/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.infosecurity-magazine.com/news/mail-bombing-attacks-it-helpdesk/" rel="noopener noreferrer">https://www.infosecurity-magazine.com/news/mail-bombing-attacks-it-helpdesk/</a></p>
+</article>
+<article class="card" data-ts="1795165200000">
+  <header class="card-head">
+    <span class="src">Infosecurity Magazine</span>
+    
+    <time datetime="2026-11-20T09:00:00+00:00">2026-11-20T09:00:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.infosecurity-magazine.com/news/overlord-rat-solana-blockchain-c2/" rel="noopener noreferrer">Suspected North Korea-Aligned Group Hides C2 on Solana Blockchain</a></h2>
+  <section class="block"><h3>Summary</h3><p>Researchers at Cisco Talos identified a North Korea-aligned threat group using the Solana blockchain to hide command-and-control (C2) server addresses for their &#x27;Overlord&#x27; RAT. The malware is designed to be persistent, including planting itself in the Windows Recovery Environment, and targets cryptocurrency holders and gamers.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>The use of blockchain for C2 communication makes traditional IP-based blocking ineffective. Defenders should focus on endpoint detection and response (EDR) to identify the malicious behavior of the RAT itself, such as unauthorized persistence mechanisms in the Windows Recovery Environment.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.infosecurity-magazine.com%2Fnews%2Foverlord-rat-solana-blockchain-c2%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.infosecurity-magazine.com/news/overlord-rat-solana-blockchain-c2/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.infosecurity-magazine.com/news/overlord-rat-solana-blockchain-c2/" rel="noopener noreferrer">https://www.infosecurity-magazine.com/news/overlord-rat-solana-blockchain-c2/</a></p>
+</article>
+<article class="card" data-ts="1795212025000">
+  <header class="card-head">
+    <span class="src">Unit 42</span>
+    
+    <time datetime="2026-11-20T22:00:25+00:00">2026-11-20T22:00:25+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://unit42.paloaltonetworks.com/com-affiliate-vishing-attacks/" rel="noopener noreferrer">Dialing for Data: Inside the Com’s High-Profile Heists</a></h2>
+  <section class="block"><h3>Summary</h3><p>Unit 42 reports on persistent vishing campaigns conducted by &#x27;Com-affiliated&#x27; threat actors, including groups like Bling Libra, targeting financial, healthcare, and legal sectors in the US, UK, and Australia. These attackers use adversary-in-the-middle (AiTM) proxies to bypass MFA and automate data exfiltration from Microsoft 365 environments, often following up with extortion messages via Teams. Two newly identified clusters, CL-CRI-1264 (Vortex) and CL-CRI-1274 (Cinder), demonstrate these tactics, including the reuse of specific MFA devices and session token replay.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>Defenders should prioritize monitoring for AiTM proxy infrastructure and unusual MFA enrollment patterns, such as the registration of unauthorized devices. Organizations should enforce phishing-resistant MFA (like FIDO2/WebAuthn) to mitigate the effectiveness of AiTM and session token theft. Additionally, hunting for automated data exfiltration signatures—specifically Python-based User Agents accessing Microsoft 365/Graph APIs—is critical for early detection.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Funit42.paloaltonetworks.com%2Fcom-affiliate-vishing-attacks%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://unit42.paloaltonetworks.com/com-affiliate-vishing-attacks/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://unit42.paloaltonetworks.com/com-affiliate-vishing-attacks/" rel="noopener noreferrer">https://unit42.paloaltonetworks.com/com-affiliate-vishing-attacks/</a></p>
+</article>
+<article class="card" data-ts="1795217327000">
+  <header class="card-head">
+    <span class="src">The Register (Security)</span>
+    
+    <time datetime="2026-11-20T23:28:47+00:00">2026-11-20T23:28:47+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.theregister.com/devops/2026/11/20/php-86-things-are-gonna-get-a-lot-more-strict-around-here/5311486" rel="noopener noreferrer">PHP 8.6: Things are gonna get a lot more strict around here</a></h2>
+  <section class="block"><h3>Summary</h3><p>PHP 8.6 has been released, introducing stricter default security configurations to combat session hijacking and cross-site request forgery. Key changes include mandatory Strict Mode for session IDs, default HttpOnly flags for cookies, and restrictions on cross-site cookie usage. Additionally, the update improves error handling for null byte strings and file operations to prevent common exploitation techniques.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>Administrators must be aware that these new defaults may be overridden by existing configurations in php.ini files, Docker templates, or application-level settings, meaning a simple upgrade does not guarantee immediate protection. Security teams should audit deployment templates to ensure these security-friendly defaults are explicitly enabled and not inadvertently disabled by legacy configuration files.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.theregister.com%2Fdevops%2F2026%2F11%2F20%2Fphp-86-things-are-gonna-get-a-lot-more-strict-around-here%2F5311486" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.theregister.com/devops/2026/11/20/php-86-things-are-gonna-get-a-lot-more-strict-around-here/5311486" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.theregister.com/devops/2026/11/20/php-86-things-are-gonna-get-a-lot-more-strict-around-here/5311486" rel="noopener noreferrer">https://www.theregister.com/devops/2026/11/20/php-86-things-are-gonna-get-a-lot-more-strict-around-here/5311486</a></p>
+</article>
+<article class="card" data-ts="1795210076000">
+  <header class="card-head">
+    <span class="src">The Register (Security)</span>
+    
+    <time datetime="2026-11-20T21:27:56+00:00">2026-11-20T21:27:56+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.theregister.com/cyber-crime/2026/11/20/visa-mastercard-theft-included-info-useful-for-phishing-but-not-draining-bank-accounts-say-researchers/5311478" rel="noopener noreferrer">Visa, Mastercard theft included info useful for phishing, but not draining bank accounts, say researchers</a></h2>
+  <section class="block"><h3>Summary</h3><p>Visa, Mastercard, and JPMorgan Chase are investigating a third-party data breach attributed to the extortion group &#x27;n0n.&#x27; While the leaked data does not contain financial details like card numbers or passwords, it includes mobile numbers and booking information, which researchers warn is highly useful for targeted phishing and social engineering. The breach appears linked to a supply-chain compromise, potentially involving Qubole, which allowed unauthorized access to downstream customer data.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>This incident highlights the risk of third-party vendors serving as a conduit for sensitive data exposure even when primary financial systems remain secure. Defenders should treat the leaked contact and booking data as high-risk for follow-on social engineering campaigns against customers. Organizations should review third-party access controls and IAM policies, specifically looking for evidence of unauthorized access to S3 buckets or similar cloud storage.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.theregister.com%2Fcyber-crime%2F2026%2F11%2F20%2Fvisa-mastercard-theft-included-info-useful-for-phishing-but-not-draining-bank-accounts-say-researchers%2F5311478" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.theregister.com/cyber-crime/2026/11/20/visa-mastercard-theft-included-info-useful-for-phishing-but-not-draining-bank-accounts-say-researchers/5311478" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.theregister.com/cyber-crime/2026/11/20/visa-mastercard-theft-included-info-useful-for-phishing-but-not-draining-bank-accounts-say-researchers/5311478" rel="noopener noreferrer">https://www.theregister.com/cyber-crime/2026/11/20/visa-mastercard-theft-included-info-useful-for-phishing-but-not-draining-bank-accounts-say-researchers/5311478</a></p>
+</article>
+<article class="card" data-ts="1795207324000">
+  <header class="card-head">
+    <span class="src">The Register (Security)</span>
+    
+    <time datetime="2026-11-20T20:42:04+00:00">2026-11-20T20:42:04+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.theregister.com/security/2026/11/20/signal-slams-door-on-prying-ai-agents-to-protect-privacy/5311466" rel="noopener noreferrer">Signal slams door on prying AI agents to protect privacy</a></h2>
+  <section class="block"><h3>Summary</h3><p>Signal has updated its iOS and Android applications to block AI agents (such as Google Gemini and Apple Siri) from accessing private messages via screen scraping or optical character recognition. CEO Meredith Whittaker criticized major OS providers for failing to offer developers granular controls to prevent AI agents from ingesting private data. While users can disable this protection, Signal warns that doing so exposes communication to third-party AI systems.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>This move underscores the growing tension between OS-level AI integration and application-level privacy. Security teams in high-privacy environments should evaluate whether their mobile device management (MDM) policies need to restrict or disable AI agent features on corporate devices to prevent accidental data leakage from secure messaging apps into AI model training or cloud-based assistant logs.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.theregister.com%2Fsecurity%2F2026%2F11%2F20%2Fsignal-slams-door-on-prying-ai-agents-to-protect-privacy%2F5311466" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.theregister.com/security/2026/11/20/signal-slams-door-on-prying-ai-agents-to-protect-privacy/5311466" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.theregister.com/security/2026/11/20/signal-slams-door-on-prying-ai-agents-to-protect-privacy/5311466" rel="noopener noreferrer">https://www.theregister.com/security/2026/11/20/signal-slams-door-on-prying-ai-agents-to-protect-privacy/5311466</a></p>
+</article>
+<article class="card" data-ts="1795195800000">
+  <header class="card-head">
+    <span class="src">The Register (Security)</span>
+    
+    <time datetime="2026-11-20T17:30:00+00:00">2026-11-20T17:30:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.theregister.com/security/2026/11/20/china-attackers-deployed-ai-agents-that-autonomously-found-and-exploited-a-0-day-to-take-over-a-university-server/5311382" rel="noopener noreferrer">China attackers deployed AI agents that autonomously found and exploited a 0-day to take over a university server</a></h2>
+  <section class="block"><h3>Summary</h3><p>Amazon&#x27;s CISO reported that suspected Chinese state-sponsored actors used an autonomous AI agent framework called &#x27;Cairn&#x27; to successfully identify and exploit a zero-day vulnerability in the MONAI Label medical imaging application. The agents operated autonomously for nearly 48 hours, attempting various exploits against multiple targets before successfully compromising a university server. The campaign demonstrates the increasing capability of AI agents to conduct multi-stage, adaptive cyberattacks without human intervention.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>The use of autonomous agents for reconnaissance and exploitation significantly shortens the time from vulnerability discovery to compromise. Defenders must shift from manual, signature-based detection to behavioral analysis that can identify rapid, iterative probing and exploitation attempts. Prioritizing the patching of edge-facing applications and monitoring for unusual API mapping or path traversal attempts is essential to counter these automated threats.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.theregister.com%2Fsecurity%2F2026%2F11%2F20%2Fchina-attackers-deployed-ai-agents-that-autonomously-found-and-exploited-a-0-day-to-take-over-a-university-server%2F5311382" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.theregister.com/security/2026/11/20/china-attackers-deployed-ai-agents-that-autonomously-found-and-exploited-a-0-day-to-take-over-a-university-server/5311382" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.theregister.com/security/2026/11/20/china-attackers-deployed-ai-agents-that-autonomously-found-and-exploited-a-0-day-to-take-over-a-university-server/5311382" rel="noopener noreferrer">https://www.theregister.com/security/2026/11/20/china-attackers-deployed-ai-agents-that-autonomously-found-and-exploited-a-0-day-to-take-over-a-university-server/5311382</a></p>
+</article>
+<article class="card" data-ts="1795193040000">
+  <header class="card-head">
+    <span class="src">The Register (Security)</span>
+    
+    <time datetime="2026-11-20T16:44:00+00:00">2026-11-20T16:44:00+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://www.theregister.com/security/2026/11/20/dutch-data-watchdog-highlights-safety-issues-with-ai-glasses/5311345" rel="noopener noreferrer">Dutch data watchdog highlights safety issues with AI glasses</a></h2>
+  <section class="block"><h3>Summary</h3><p>The Dutch Data Protection Authority (AP) has advised against purchasing AI-powered smart glasses after safety tests revealed significant flaws, including providing dangerous medical advice, misinterpreting safety warnings, and potential privacy violations. The investigation also identified cybersecurity risks, such as unauthorized third-party access to device cameras and recordings. The regulator emphasized that these devices often process data on servers outside the EU without sufficient transparency.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>Organizations should consider banning the use of smart glasses in sensitive environments due to the dual risks of unauthorized data collection (privacy) and the potential for device compromise (security). Security policies should explicitly address wearable AI devices, treating them as potential IoT vulnerabilities that can be accessed by unauthorized parties or used to exfiltrate proprietary information.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fwww.theregister.com%2Fsecurity%2F2026%2F11%2F20%2Fdutch-data-watchdog-highlights-safety-issues-with-ai-glasses%2F5311345" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://www.theregister.com/security/2026/11/20/dutch-data-watchdog-highlights-safety-issues-with-ai-glasses/5311345" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://www.theregister.com/security/2026/11/20/dutch-data-watchdog-highlights-safety-issues-with-ai-glasses/5311345" rel="noopener noreferrer">https://www.theregister.com/security/2026/11/20/dutch-data-watchdog-highlights-safety-issues-with-ai-glasses/5311345</a></p>
+</article>
+<article class="card" data-ts="1795208348000">
+  <header class="card-head">
+    <span class="src">Ars Technica (Security)</span>
+    
+    <time datetime="2026-11-20T20:59:08+00:00">2026-11-20T20:59:08+00:00</time>
+  </header>
+  <h2 class="topic"><a href="https://arstechnica.com/security/2026/11/a-leaky-ai-supply-chain-is-exposing-secret-user-data-at-an-alarming-rate/" rel="noopener noreferrer">Researcher plants 2m canaries into the AI supply chain. A privacy disaster surfaced.</a></h2>
+  <section class="block"><h3>Summary</h3><p>Researcher HD Moore conducted an experiment by planting 2 million &#x27;canary&#x27; secrets into AI prompts, revealing widespread data leakage across the AI supply chain. The findings show that AI routers and inference resellers frequently log prompts containing sensitive credentials, and in some cases, attackers have compromised providers to siphon this data. The study also identified instances where providers ignored &#x27;Zero Data Retention&#x27; privacy flags and scraped user data for their own purposes.</p></section>
+  <section class="block analysis"><h3>Analysis</h3><p>This research confirms that the AI supply chain is currently a major vector for credential theft and privacy violations. Organizations must treat AI prompts as untrusted input and strictly prohibit the inclusion of API keys, passwords, or sensitive PII in any prompts sent to third-party AI services. Security teams should assume that any data sent to an AI provider is being logged and potentially exposed.</p></section>
+  <div class="actions">
+    <a class="btn-li" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Farstechnica.com%2Fsecurity%2F2026%2F11%2Fa-leaky-ai-supply-chain-is-exposing-secret-user-data-at-an-alarming-rate%2F" target="_blank" rel="noopener noreferrer">Post to LinkedIn</a>
+    <a class="btn-sec" href="https://arstechnica.com/security/2026/11/a-leaky-ai-supply-chain-is-exposing-secret-user-data-at-an-alarming-rate/" rel="noopener noreferrer">Open article</a>
+  </div>
+  <p class="linkrow"><a class="full" href="https://arstechnica.com/security/2026/11/a-leaky-ai-supply-chain-is-exposing-secret-user-data-at-an-alarming-rate/" rel="noopener noreferrer">https://arstechnica.com/security/2026/11/a-leaky-ai-supply-chain-is-exposing-secret-user-data-at-an-alarming-rate/</a></p>
+</article>
+    </div>
+    <div id="pane-summary" class="tab-pane" hidden>
+<div class="summary-wrap"><div class="reader-tools summary-actions">
+        <button type="button" class="apply read" id="readSummary">▶ Read the summary</button>
+        <button type="button" class="reset stop" id="stopSummary" disabled>Stop</button>
+        <p id="summaryStatus"></p>
+      </div><div id="summaryText"><p>Several major organizations have reported significant security incidents. Bell Canada confirmed an exfiltration of enterprise customer data by an agentic threat actor. JPMorgan Chase, Visa, and Mastercard are investigating a third-party vendor breach linked to the n0n ransomware group, which exposed non-financial customer information. Additionally, the West Virginia Legislature, the European Commission, and The Container Store have all recently managed cyberattacks, with the latter two specifically noting the involvement of AI-assisted methods.</p><p>The use of autonomous AI in cyberattacks is a growing concern. Amazon’s threat intelligence team reported that Chinese-linked actors used the Cairn framework to autonomously discover and exploit a zero-day vulnerability in medical imaging software to compromise a university server. Researchers also identified the Bazuka Android malware, which utilizes large language models to manage infections. Furthermore, a study by HD Moore revealed that AI supply chains frequently leak sensitive credentials, and the Dutch Data Protection Authority has warned that AI-powered smart glasses present significant privacy and security risks.</p><p>Critical vulnerabilities continue to impact infrastructure and software. F5 released emergency patches for five critical BIG-IP flaws, and Cisco is addressing a critical Expressway vulnerability that has been actively exploited to move laterally into internal networks. A critical flaw in the Linux KVM hypervisor (CVE-2026-99312) allows guest VMs to access host memory on AMD systems, while the China-nexus group Armory Castle has been linked to the exploitation of a VMware vCenter zero-day. SonicWall has warned that its Generation 6 firewalls will no longer receive security updates, urging immediate replacement.</p><p>In other developments, WhatsApp patched three security flaws, including an Android-specific bug used in scam campaigns. Microsoft has begun the automatic rollout of Windows 11 26H2 and released the KB5132057 preview update, while PHP 8.6 introduced stricter security defaults. Signal has updated its mobile apps to block AI agents from scraping private messages. Meanwhile, the CTO of the recovery firm RansomwareHelp was indicted for wire fraud, and North Korea-aligned actors were observed using the Solana blockchain to hide command-and-control infrastructure.</p></div></div>
+    </div>
+  </div>
+  <script>
+(function() {
+  function countVisible() {
+    const n = document.querySelectorAll("article.card:not([hidden])").length;
+    const el = document.getElementById("visibleCount");
+    if (el) el.textContent = n;
+  }
+  function applyDayFilter() {
+    const input = document.getElementById("dayWindow");
+    const n = parseInt(input && input.value, 10);
+    if (!input || !Number.isFinite(n) || n < 1) {
+      alert("Enter a positive number of days.");
+      return;
+    }
+    const cutoff = Date.now() - n * 86400000;
+    document.querySelectorAll("article.card").forEach(function(el) {
+      const raw = el.getAttribute("data-ts");
+      if (raw === null || raw === "") {
+        el.hidden = true;
+        return;
+      }
+      const ts = parseInt(raw, 10);
+      if (!Number.isFinite(ts)) {
+        el.hidden = true;
+        return;
+      }
+      el.hidden = ts < cutoff;
+    });
+    countVisible();
+  }
+  function resetFilter() {
+    document.querySelectorAll("article.card").forEach(function(el) { el.hidden = false; });
+    countVisible();
+  }
+  const b1 = document.getElementById("applyDays");
+  const b2 = document.getElementById("resetDays");
+  if (b1) b1.addEventListener("click", applyDayFilter);
+  if (b2) b2.addEventListener("click", resetFilter);
+})();
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/microsoft-cognitiveservices-speech-sdk@1.51.0/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle-min.js" onerror="var s=document.createElement('script');s.src='https://aka.ms/csspeech/jsbrowserpackageraw';s.onerror=function(){window.__readerSdkBlocked=true;};document.head.appendChild(s);"></script>
+  <script>
+
+(function() {
+  var LANG = "en";
+  var VOICE = "en-US-AriaNeural";
+  var VOICE_FALLBACK = "en-US-JennyNeural";
+  var DEFAULT_REGION = "";
+  try {
+    var sp = new URLSearchParams(window.location.search || "");
+    var rv = sp.get("readerVoice");
+    var rvf = sp.get("readerVoiceFallback");
+    var rr = sp.get("readerRegion");
+    if (rv && String(rv).trim()) VOICE = String(rv).trim();
+    if (rvf && String(rvf).trim()) VOICE_FALLBACK = String(rvf).trim();
+    if (rr && String(rr).trim()) DEFAULT_REGION = String(rr).trim();
+  } catch (e) {}
+  var KEY_AZURE = "reportsDigestReaderAzureKey";
+  var KEY_REGION = "reportsDigestReaderAzureRegion";
+  var readAborted = false;
+  var currentAudio = null;
+  var stopPlayback = null;  // set while audio plays; stopRead() calls it to resolve the play promise
+  var READ_LABEL = LANG === "vi" ? "Đọc tin" : "Read news";
+  var resumeIndex = 0;   // where the next "Read" starts (0 = beginning; set after an error/stop)
+  var currentIndex = 0;  // item currently being read (for resume + status)
+  var currentRun = null; // the in-flight runRead() promise (null when idle)
+  var currentTotal = 0;  // number of items in the in-flight card read (0 when not reading cards)
+  var cardReading = false; // true while runRead() (not the summary) is playing
+  var RATE_STORAGE_KEY = "reportsDigestReaderSpeechRate";
+  var RATE_MIN = 0.5;
+  var RATE_MAX = 2;
+  var RATE_STEP = 0.25;
+  var speechRateCached = 1;
+
+  function clampSpeechRate(r) {
+    if (!isFinite(r)) return 1;
+    return Math.min(RATE_MAX, Math.max(RATE_MIN, Math.round(r / RATE_STEP) * RATE_STEP));
+  }
+  function persistSpeechRate(r) {
+    r = clampSpeechRate(r);
+    try { sessionStorage.setItem(RATE_STORAGE_KEY, String(r)); } catch (e) {}
+    return r;
+  }
+  function loadSpeechRateOnce() {
+    var fromQs = null;
+    try {
+      var sp = new URLSearchParams(window.location.search || "");
+      var qs = sp.get("readerSpeed");
+      if (qs != null && String(qs).trim() !== "") {
+        var q = parseFloat(String(qs).replace(",", "."));
+        if (isFinite(q)) fromQs = clampSpeechRate(q);
+      }
+    } catch (e) {}
+    if (fromQs != null) { speechRateCached = persistSpeechRate(fromQs); return; }
+    try {
+      var raw = sessionStorage.getItem(RATE_STORAGE_KEY);
+      if (raw != null && String(raw).trim() !== "") {
+        var val = parseFloat(String(raw).replace(",", "."));
+        if (isFinite(val)) { speechRateCached = clampSpeechRate(val); return; }
+      }
+    } catch (e) {}
+    speechRateCached = 1;
+  }
+  function getSpeechRate() { return speechRateCached; }
+  function formatSpeechRateDisplay(r) {
+    var x = clampSpeechRate(r);
+    var s = (Math.round(x * 100) / 100).toString();
+    if (s.indexOf(".") === -1) s += ".0";
+    return s + "\u00d7";
+  }
+  function refreshSpeechRateUI() {
+    var el = document.getElementById("readerSpeedValue");
+    var dn = document.getElementById("readerSpeedDown");
+    var up = document.getElementById("readerSpeedUp");
+    var rr = getSpeechRate();
+    if (el) el.textContent = formatSpeechRateDisplay(rr);
+    if (dn) dn.disabled = rr <= RATE_MIN + 1e-9;
+    if (up) up.disabled = rr >= RATE_MAX - 1e-9;
+    applySpeechRateToPlayingAudio();
+  }
+  function applySpeechRateToPlayingAudio() {
+    if (currentAudio && currentAudio.playbackRate != null) {
+      try { currentAudio.playbackRate = getSpeechRate(); } catch (e) {}
+    }
+  }
+  function bumpSpeechRate(delta) {
+    speechRateCached = persistSpeechRate(getSpeechRate() + delta);
+    refreshSpeechRateUI();
+  }
+  loadSpeechRateOnce();
+
+  function status(msg, isErr) {
+    var el = document.getElementById("readStatus");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.className = isErr ? "err" : "";
+  }
+  function readKeyHint(msg) {
+    var el = document.getElementById("readerKeySavedHint");
+    if (el) el.textContent = msg || "";
+  }
+
+  function readStored(k) {
+    // localStorage so the key + region persist across days (until the visitor edits/clears them).
+    try { var v = localStorage.getItem(k); return v ? String(v).trim() : ""; } catch (e) { return ""; }
+  }
+  function getAzureKey() {
+    var s = readStored(KEY_AZURE);
+    if (s) return s;
+    var inp = document.getElementById("readerAzureKeyInput");
+    return inp ? String(inp.value || "").trim() : "";
+  }
+  function getAzureRegion() {
+    var inp = document.getElementById("readerAzureRegionInput");
+    var live = inp ? String(inp.value || "").trim() : "";
+    if (live) return live;
+    var s = readStored(KEY_REGION);
+    return s || DEFAULT_REGION || "";
+  }
+  function persistReaderKeys() {
+    var keyInp = document.getElementById("readerAzureKeyInput");
+    var regInp = document.getElementById("readerAzureRegionInput");
+    var key = keyInp ? String(keyInp.value || "").trim() : "";
+    var reg = regInp ? String(regInp.value || "").trim() : "";
+    if (!key && !reg) {
+      readKeyHint(LANG === "vi" ? "Nhập khóa + vùng rồi Lưu." : "Enter key + region, then Save.");
+      return false;
+    }
+    try {
+      if (key) localStorage.setItem(KEY_AZURE, key);
+      if (reg) localStorage.setItem(KEY_REGION, reg);
+    } catch (e) {
+      readKeyHint(LANG === "vi" ? "Không lưu được (localStorage)." : "Could not save (localStorage).");
+      return false;
+    }
+    var hk = readStored(KEY_AZURE);
+    var hr = readStored(KEY_REGION);
+    if (!hk || !hr) {
+      readKeyHint(
+        LANG === "vi"
+          ? (!hk ? "Thiếu khóa Azure — nhập và Lưu." : "Thiếu vùng — nhập và Lưu.")
+          : (!hk ? "Missing Azure key — enter and Save." : "Missing region — enter and Save.")
+      );
+    } else {
+      readKeyHint(LANG === "vi" ? "Đã lưu trên trình duyệt này." : "Saved on this browser.");
+    }
+    if (keyInp && key) keyInp.value = "";
+    return true;
+  }
+  function syncKeyHintOnLoad() {
+    var regInp = document.getElementById("readerAzureRegionInput");
+    var storedReg = readStored(KEY_REGION) || DEFAULT_REGION;
+    if (regInp && storedReg && !regInp.value) regInp.value = storedReg;
+    var k = readStored(KEY_AZURE);
+    if (k) readKeyHint(LANG === "vi" ? "Đã lưu khóa Azure trên trình duyệt này." : "Azure key saved on this browser.");
+  }
+
+  function visibleCards() {
+    return Array.prototype.slice.call(document.querySelectorAll("article.card")).filter(function(c) { return !c.hidden; });
+  }
+  function cardTitle(card) {
+    var ta = card.querySelector(".topic a");
+    return ta ? ta.textContent.trim() : "";
+  }
+  function cardText(card) {
+    var title = cardTitle(card);
+    var blocks = card.querySelectorAll(".block p");
+    var chunks = [];
+    for (var i = 0; i < blocks.length; i++) chunks.push(blocks[i].textContent.trim());
+    return (title ? title + ". " : "") + chunks.join(" ");
+  }
+
+  // One synthesizer per voice, kept alive across cards so the Azure websocket
+  // stays warm instead of reconnecting per card (per-card reconnects were a
+  // source of wss 1006). Disposed on error (so a retry reconnects) and when the
+  // read finishes/stops or the credentials change.
+  var synthCache = {};   // voiceId -> SpeechSynthesizer
+  var synthCreds = null;   // { key, region } the cached synthesizers were built with
+
+  function disposeSynth(voiceId) {
+    var s = synthCache[voiceId];
+    if (s) { try { s.close(); } catch (e) {} delete synthCache[voiceId]; }
+  }
+  function disposeAllSynths() {
+    for (var k in synthCache) { if (Object.prototype.hasOwnProperty.call(synthCache, k)) disposeSynth(k); }
+    synthCache = {};
+    synthCreds = null;
+  }
+  function getSynth(SDK, key, region, voiceId) {
+    if (!synthCreds || synthCreds.key !== key || synthCreds.region !== region) {
+      disposeAllSynths();
+      synthCreds = { key: key, region: region };
+    }
+    if (!synthCache[voiceId]) {
+      var cfg = SDK.SpeechConfig.fromSubscription(key, region);
+      cfg.speechSynthesisVoiceName = voiceId;
+      cfg.speechSynthesisOutputFormat = SDK.SpeechSynthesisOutputFormat.Audio24Khz48KBitRateMonoMp3;
+      synthCache[voiceId] = new SDK.SpeechSynthesizer(cfg, null);
+    }
+    return synthCache[voiceId];
+  }
+
+  function synthOnce(key, region, text, voiceId) {
+    return new Promise(function(resolve, reject) {
+      var SDK = window.SpeechSDK;
+      if (!SDK) {
+        var blocked = !!window.__readerSdkBlocked;
+        reject(new Error(
+          LANG === "vi"
+            ? (blocked
+                ? "Chưa tải được Azure Speech SDK — trình duyệt đang chặn (tắt trình chặn quảng cáo/VPN của Opera hoặc dùng trình duyệt khác)."
+                : "Chưa tải được Azure Speech SDK — thử tải lại trang.")
+            : (blocked
+                ? "Azure Speech SDK failed to load — your browser is blocking it (disable Opera's built-in ad blocker/VPN, or use another browser)."
+                : "Azure Speech SDK failed to load — try reloading the page.")
+        ));
+        return;
+      }
+      var synth;
+      try {
+        synth = getSynth(SDK, key, region, voiceId);
+      } catch (e) { disposeSynth(voiceId); reject(e); return; }
+      synth.speakTextAsync(
+        text,
+        function(result) {
+          if (result.reason === SDK.ResultReason.SynthesizingAudioCompleted) {
+            resolve(result.audioData);  // keep the synthesizer open for the next card
+          } else {
+            var msg = result.errorDetails || ("TTS failed: " + result.reason);
+            disposeSynth(voiceId);      // drop it so a retry rebuilds the connection
+            reject(new Error(msg));
+          }
+        },
+        function(err) { disposeSynth(voiceId); reject(new Error(String(err))); }
+      );
+    });
+  }
+  // Ignore a pending prefetch we no longer await, so closing its synthesizer
+  // does not surface as an unhandled promise rejection.
+  function swallow(p) { if (p && typeof p.then === "function") { try { p.then(null, function() {}); } catch (e) {} } }
+  function sleep(ms) { return new Promise(function(r) { setTimeout(r, ms); }); }
+  function isTransientErr(e) {
+    var m = (e && e.message ? e.message : String(e)) || "";
+    // 1006 = abnormal websocket close; also generic connect/timeout/network drops.
+    return /1006|Unable to contact server|websocket|connection\s|connection\.|timed out|timeout|network/i.test(m);
+  }
+  // Retry the SAME voice on transient connection drops (e.g. wss 1006) before giving up.
+  // Backoff grows (1s, 2s, 4s, 6s) to ride through short Azure outages rather than aborting.
+  var SYNTH_RETRIES = 5;
+  var SYNTH_BACKOFF_MS = [1000, 2000, 4000, 6000];
+  async function synthWithRetry(key, region, text, voiceId) {
+    var lastErr;
+    for (var attempt = 0; attempt < SYNTH_RETRIES; attempt++) {
+      if (readAborted) throw new Error("aborted");
+      try {
+        return await synthOnce(key, region, text, voiceId);
+      } catch (e) {
+        lastErr = e;
+        if (!isTransientErr(e) || attempt === SYNTH_RETRIES - 1) throw e;
+        console.warn("Reader TTS: transient failure, retrying (" + (attempt + 1) + ")", e);
+        await sleep(SYNTH_BACKOFF_MS[Math.min(attempt, SYNTH_BACKOFF_MS.length - 1)]);
+      }
+    }
+    throw lastErr;
+  }
+  async function synth(key, region, text) {
+    try {
+      return await synthWithRetry(key, region, text, VOICE);
+    } catch (e1) {
+      if (!VOICE_FALLBACK || VOICE_FALLBACK === VOICE) throw e1;
+      console.warn("Reader TTS: primary voice failed, trying fallback", e1);
+      return await synthWithRetry(key, region, text, VOICE_FALLBACK);
+    }
+  }
+
+  function playMp3Buffer(buf) {
+    return new Promise(function(resolve, reject) {
+      if (readAborted) { resolve(); return; }
+      var blob = new Blob([buf], { type: "audio/mpeg" });
+      var url = URL.createObjectURL(blob);
+      var audio = new Audio(url);
+      currentAudio = audio;
+      try { audio.playbackRate = getSpeechRate(); } catch (e) {}  // apply speed to EVERY item, not just the first
+      var settled = false;
+      function finish(err) {
+        if (settled) return;
+        settled = true;
+        stopPlayback = null;
+        try { URL.revokeObjectURL(url); } catch (e) {}
+        currentAudio = null;
+        // A stop() tears down the element (fires 'error'/rejects play) — that's expected, resolve.
+        if (err && !readAborted) { reject(err); } else { resolve(); }
+      }
+      // stopRead() calls this so the awaiting loop unblocks immediately on "Dừng đọc"
+      // (removing the src does not reliably fire an event, which would hang the read).
+      stopPlayback = function() { finish(null); };
+      audio.onended = function() { finish(null); };
+      audio.onerror = function() { finish(new Error("Audio playback failed.")); };
+      audio.play().catch(function(e) { finish(e); });
+    });
+  }
+
+  function setReadingUI(reading) {
+    var readBtn = document.getElementById("readNews");
+    var stopBtn = document.getElementById("stopRead");
+    if (readBtn) readBtn.disabled = reading;
+    if (stopBtn) stopBtn.disabled = !reading;
+    cardReading = reading;
+    updateNavButtons();
+  }
+  function updateNavButtons() {
+    var prevBtn = document.getElementById("prevRead");
+    var nextBtn = document.getElementById("nextRead");
+    if (prevBtn) prevBtn.disabled = !cardReading || currentIndex <= 0;
+    if (nextBtn) nextBtn.disabled = !cardReading || currentIndex >= currentTotal - 1;
+  }
+  // Skip to the previous/next article while reading (restarts the read loop at that item).
+  function jumpRelative(delta) {
+    if (!cardReading) return;
+    var idx = currentIndex + delta;
+    if (idx < 0 || idx >= currentTotal) return;
+    cardReading = false;  // block repeat clicks until the restarted loop is running
+    updateNavButtons();
+    startFromIndex(idx).catch(function(e) { status(String(e), true); });
+  }
+  function updateReadButtonLabel() {
+    var readBtn = document.getElementById("readNews");
+    if (!readBtn) return;
+    readBtn.textContent = resumeIndex > 0
+      ? (LANG === "vi" ? "Đọc tiếp (mục " : "Continue (item ") + (resumeIndex + 1) + ")"
+      : READ_LABEL;
+  }
+  function itemLabel(j, total, title) {
+    var t = title ? ": " + (title.length > 80 ? title.slice(0, 79) + "…" : title) : "";
+    return (j + 1) + "/" + total + t;
+  }
+
+  async function runRead(startIndex) {
+    readAborted = false;
+    var cards = visibleCards();
+    if (!cards.length) {
+      status(LANG === "vi" ? "Không có bài đang hiển thị." : "No articles visible.", true);
+      return;
+    }
+    var key = getAzureKey();
+    var region = getAzureRegion();
+    if (!key || !region) {
+      status(
+        LANG === "vi"
+          ? "Nhập và lưu khóa Azure Speech + vùng để đọc."
+          : "Enter and save an Azure Speech key + region to read.",
+        true
+      );
+      var f = document.getElementById(key ? "readerAzureRegionInput" : "readerAzureKeyInput");
+      if (f) f.focus();
+      return;
+    }
+
+    // Index-aligned with visibleCards() so a per-card "read from here" maps 1:1 to texts[].
+    var texts = cards.map(cardText);
+    var titles = cards.map(cardTitle);
+    var total = texts.length;
+    currentTotal = total;
+    if (!total) {
+      status(LANG === "vi" ? "Không có nội dung để đọc." : "No readable content.", true);
+      return;
+    }
+    var start = Math.min(Math.max(parseInt(startIndex, 10) || 0, 0), total - 1);
+
+    setReadingUI(true);
+    if (currentAudio) { try { currentAudio.pause(); } catch (e) {} currentAudio = null; }
+
+    var prefetch = null;
+    var j = start;
+    try {
+      prefetch = synth(key, region, texts[start]);
+      for (j = start; j < total; j++) {
+        if (readAborted) break;
+        currentIndex = j;
+        updateNavButtons();
+        status((LANG === "vi" ? "Đang đọc " : "Reading ") + itemLabel(j, total, titles[j]));
+        var buf = await prefetch;
+        if (readAborted) break;
+        prefetch = (j + 1 < total) ? synth(key, region, texts[j + 1]) : null;
+        await playMp3Buffer(buf);
+      }
+    } catch (e) {
+      swallow(prefetch); disposeAllSynths();
+      if (readAborted) {
+        resumeIndex = currentIndex;
+        status((LANG === "vi" ? "Đã dừng ở mục " : "Stopped at item ") + itemLabel(currentIndex, total, titles[currentIndex]) +
+          (LANG === "vi" ? " — bấm Đọc tiếp để tiếp tục." : " — click Continue to resume."), false);
+      } else {
+        resumeIndex = j;  // remember the failed item so the user can retry from here
+        status((LANG === "vi" ? "Lỗi ở mục " : "Error at item ") + itemLabel(j, total, titles[j]) + " — " +
+          String(e && e.message ? e.message : e) + " " +
+          (LANG === "vi" ? "Bấm \u201cĐọc tiếp\u201d để đọc lại từ mục này." : "Click \u201cContinue\u201d to retry from this item."), true);
+      }
+      setReadingUI(false);
+      updateReadButtonLabel();
+      return;
+    }
+
+    swallow(prefetch); disposeAllSynths();
+    if (readAborted) {
+      resumeIndex = currentIndex;  // resume from where the user stopped
+      status((LANG === "vi" ? "Đã dừng ở mục " : "Stopped at item ") + itemLabel(currentIndex, total, titles[currentIndex]) +
+        (LANG === "vi" ? " — bấm Đọc tiếp để tiếp tục." : " — click Continue to resume."), false);
+    } else {
+      resumeIndex = 0;  // finished the whole list — next read starts from the top
+      status(LANG === "vi" ? "Đã đọc xong." : "Finished reading.", false);
+    }
+    setReadingUI(false);
+    updateReadButtonLabel();
+  }
+
+  function stopRead() {
+    // Just signal the abort + tear down audio; runRead's loop reports the stop point,
+    // sets resumeIndex, and restores the buttons (so "Đọc tiếp" resumes from here).
+    readAborted = true;
+    if (currentAudio) {
+      try { currentAudio.pause(); currentAudio.removeAttribute("src"); currentAudio.load(); } catch (e) {}
+      currentAudio = null;
+    }
+    if (stopPlayback) { try { stopPlayback(); } catch (e) {} }  // unblock the awaiting read loop
+    disposeAllSynths();  // free the Azure websocket immediately on stop
+  }
+
+  // Start reading at a chosen item. If a read is already running, stop it and wait for the
+  // loop to unwind before starting the new one (so the two don't overlap on shared state).
+  async function startFromIndex(idx) {
+    if (currentRun) {
+      stopRead();
+      try { await currentRun; } catch (e) {}
+    }
+    resumeIndex = idx > 0 ? idx : 0;
+    currentRun = runRead(idx);
+    currentRun.then(function() { currentRun = null; }, function() { currentRun = null; });
+    return currentRun;
+  }
+
+  var CARD_BTN_LABEL = LANG === "vi" ? "▶ Đọc từ đây" : "▶ Read from here";
+  function injectCardReadButtons() {
+    var cards = document.querySelectorAll("article.card");
+    for (var i = 0; i < cards.length; i++) {
+      (function(card) {
+        if (card.querySelector(".reader-card-btn")) return;
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "reader-card-btn";
+        btn.textContent = CARD_BTN_LABEL;
+        btn.title = LANG === "vi" ? "Đọc từ bài này trở đi" : "Read from this article onward";
+        btn.addEventListener("click", function() {
+          var vis = visibleCards();
+          var idx = vis.indexOf(card);
+          if (idx < 0) return;  // hidden by the day filter
+          startFromIndex(idx).catch(function(e) { status(String(e), true); });
+        });
+        var topic = card.querySelector(".topic");
+        if (topic) topic.appendChild(btn); else card.insertBefore(btn, card.firstChild);
+      })(cards[i]);
+    }
+  }
+
+  // ---- Summary ("Tổng hợp") tab: read the synthesized briefing via the same TTS engine ----
+  function summaryStatus(msg, isErr) {
+    var el = document.getElementById("summaryStatus");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.className = isErr ? "err" : "";
+  }
+  function setSummaryReadingUI(reading) {
+    var rb = document.getElementById("readSummary");
+    var sb = document.getElementById("stopSummary");
+    if (rb) rb.disabled = reading;
+    if (sb) sb.disabled = !reading;
+  }
+  function collectSummaryChunks() {
+    var el = document.getElementById("summaryText");
+    if (!el) return [];
+    var chunks = [];
+    var ps = el.querySelectorAll("p");
+    for (var i = 0; i < ps.length; i++) { var t = ps[i].textContent.trim(); if (t) chunks.push(t); }
+    if (!chunks.length) { var all = el.textContent.trim(); if (all) chunks.push(all); }
+    return chunks;
+  }
+  async function runSummary() {
+    // Reuse the shared engine (synth/playMp3Buffer/stopPlayback/speed); paragraph = chunk.
+    if (currentRun) { stopRead(); try { await currentRun; } catch (e) {} }
+    currentRun = (async function() {
+      readAborted = false;
+      var chunks = collectSummaryChunks();
+      if (!chunks.length) {
+        summaryStatus(LANG === "vi" ? "Chưa có bản tổng hợp." : "No summary available.", true);
+        return;
+      }
+      var key = getAzureKey(), region = getAzureRegion();
+      if (!key || !region) {
+        summaryStatus(LANG === "vi" ? "Nhập và lưu khóa Azure Speech + vùng để đọc." : "Enter and save an Azure Speech key + region to read.", true);
+        return;
+      }
+      setSummaryReadingUI(true);
+      if (currentAudio) { try { currentAudio.pause(); } catch (e) {} currentAudio = null; }
+      var prefetch = null;
+      try {
+        prefetch = synth(key, region, chunks[0]);
+        for (var j = 0; j < chunks.length; j++) {
+          if (readAborted) break;
+          summaryStatus((LANG === "vi" ? "Đang đọc bản tổng hợp… " : "Reading the summary… ") + (j + 1) + "/" + chunks.length);
+          var buf = await prefetch;
+          if (readAborted) break;
+          prefetch = (j + 1 < chunks.length) ? synth(key, region, chunks[j + 1]) : null;
+          await playMp3Buffer(buf);
+        }
+      } catch (e) {
+        swallow(prefetch); disposeAllSynths();
+        if (!readAborted) summaryStatus(String(e && e.message ? e.message : e), true);
+        else summaryStatus(LANG === "vi" ? "Đã dừng." : "Stopped.", false);
+        setSummaryReadingUI(false);
+        return;
+      }
+      swallow(prefetch); disposeAllSynths();
+      summaryStatus(readAborted ? (LANG === "vi" ? "Đã dừng." : "Stopped.") : (LANG === "vi" ? "Đã đọc xong." : "Finished."), false);
+      setSummaryReadingUI(false);
+    })();
+    currentRun.then(function() { currentRun = null; }, function() { currentRun = null; });
+    return currentRun;
+  }
+
+  function initTabs() {
+    var btns = document.querySelectorAll(".tab-btn");
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].addEventListener("click", function() {
+        var target = this.getAttribute("data-tab");
+        var allBtns = document.querySelectorAll(".tab-btn");
+        for (var k = 0; k < allBtns.length; k++) {
+          var t = allBtns[k].getAttribute("data-tab");
+          var pane = document.getElementById(t);
+          var on = t === target;
+          allBtns[k].className = on ? "tab-btn active" : "tab-btn";
+          if (pane) pane.hidden = !on;
+        }
+      });
+    }
+  }
+
+  var r = document.getElementById("readNews");
+  var s = document.getElementById("stopRead");
+  var saveBtn = document.getElementById("saveReaderApiKey");
+  var keyInp = document.getElementById("readerAzureKeyInput");
+  var regInp = document.getElementById("readerAzureRegionInput");
+  if (r) r.addEventListener("click", function() { startFromIndex(resumeIndex).catch(function(e) { status(String(e), true); }); });
+  if (s) s.addEventListener("click", stopRead);
+  var pv = document.getElementById("prevRead");
+  var nx = document.getElementById("nextRead");
+  if (pv) pv.addEventListener("click", function() { jumpRelative(-1); });
+  if (nx) nx.addEventListener("click", function() { jumpRelative(1); });
+  var sumR = document.getElementById("readSummary");
+  var sumS = document.getElementById("stopSummary");
+  if (sumR) sumR.addEventListener("click", function() { runSummary().catch(function(e) { summaryStatus(String(e), true); }); });
+  if (sumS) sumS.addEventListener("click", stopRead);
+  if (saveBtn) saveBtn.addEventListener("click", persistReaderKeys);
+  function onEnter(el) {
+    if (!el) return;
+    el.addEventListener("keydown", function(ev) { if (ev.key === "Enter") { ev.preventDefault(); persistReaderKeys(); } });
+  }
+  onEnter(keyInp);
+  onEnter(regInp);
+  var spdDn = document.getElementById("readerSpeedDown");
+  var spdUp = document.getElementById("readerSpeedUp");
+  if (spdDn) spdDn.addEventListener("click", function() { bumpSpeechRate(-RATE_STEP); });
+  if (spdUp) spdUp.addEventListener("click", function() { bumpSpeechRate(RATE_STEP); });
+  refreshSpeechRateUI();
+  syncKeyHintOnLoad();
+  injectCardReadButtons();
+  initTabs();
+})();
+
+  </script>
+  <script>
+
+(function() {
+  var LANG = "en";
+  var REPO = "HiepTon/reports";
+  var REF = "main";
+  var KEY_TOKEN = "reportsDigestRebuildGithubToken";
+
+  function status(msg, isErr) {
+    var el = document.getElementById("rebuildStatus");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.className = isErr ? "err" : "";
+  }
+  function hint(msg) {
+    var el = document.getElementById("rebuildTokenHint");
+    if (el) el.textContent = msg || "";
+  }
+  function readToken() {
+    try { var v = localStorage.getItem(KEY_TOKEN); return v ? String(v).trim() : ""; } catch (e) { return ""; }
+  }
+  function getToken() {
+    var s = readToken();
+    if (s) return s;
+    var inp = document.getElementById("rebuildTokenInput");
+    return inp ? String(inp.value || "").trim() : "";
+  }
+  function saveToken() {
+    var inp = document.getElementById("rebuildTokenInput");
+    var t = inp ? String(inp.value || "").trim() : "";
+    if (!t) { hint(LANG === "vi" ? "Nhập token rồi Lưu." : "Enter a token, then Save."); return; }
+    try { localStorage.setItem(KEY_TOKEN, t); } catch (e) {
+      hint(LANG === "vi" ? "Không lưu được (localStorage)." : "Could not save (localStorage)."); return;
+    }
+    if (inp) inp.value = "";
+    hint(LANG === "vi" ? "Đã lưu token trên trình duyệt này." : "Token saved on this browser.");
+  }
+
+  async function runRebuild() {
+    var token = getToken();
+    if (!token) {
+      status(LANG === "vi" ? "Nhập và lưu GitHub token để chạy." : "Enter and save a GitHub token to run.", true);
+      var f = document.getElementById("rebuildTokenInput");
+      if (f) f.focus();
+      return;
+    }
+    var sel = document.getElementById("rebuildWorkflow");
+    var wf = sel ? sel.value : "";
+    if (!wf) { status(LANG === "vi" ? "Chọn bản tin để tạo lại." : "Choose a digest to rebuild.", true); return; }
+    var btn = document.getElementById("rebuildRun");
+    if (btn) btn.disabled = true;
+    status(LANG === "vi" ? "Đang gửi yêu cầu…" : "Dispatching…");
+    try {
+      var url = "https://api.github.com/repos/" + REPO + "/actions/workflows/" + encodeURIComponent(wf) + "/dispatches";
+      var resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Accept": "application/vnd.github+json",
+          "Authorization": "Bearer " + token,
+          "X-GitHub-Api-Version": "2022-11-28",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ ref: REF })
+      });
+      if (resp.status === 204) {
+        status(LANG === "vi"
+          ? "Đã kích hoạt build ✓ (chạy vài phút; tải lại trang sau khi xong)."
+          : "Build queued ✓ (takes a few minutes; reload the page when it finishes).", false);
+      } else {
+        var detail = "";
+        try { var j = await resp.json(); detail = j && j.message ? j.message : ""; } catch (e) {}
+        var base = (LANG === "vi" ? "Không kích hoạt được (HTTP " : "Dispatch failed (HTTP ") + resp.status + ")";
+        if (resp.status === 401 || resp.status === 403) base += LANG === "vi" ? " — token thiếu quyền Actions ghi." : " — token lacks Actions write access.";
+        else if (resp.status === 404) base += LANG === "vi" ? " — sai repo/workflow hoặc token không có quyền." : " — wrong repo/workflow, or the token can't see it.";
+        status(detail ? base + ": " + detail : base, true);
+      }
+    } catch (e) {
+      status(String(e && e.message ? e.message : e), true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  var runBtn = document.getElementById("rebuildRun");
+  var saveBtn = document.getElementById("saveRebuildToken");
+  var tokInp = document.getElementById("rebuildTokenInput");
+  if (runBtn) runBtn.addEventListener("click", function() { runRebuild().catch(function(e) { status(String(e), true); }); });
+  if (saveBtn) saveBtn.addEventListener("click", saveToken);
+  if (tokInp) tokInp.addEventListener("keydown", function(ev) { if (ev.key === "Enter") { ev.preventDefault(); saveToken(); } });
+  if (readToken()) hint(LANG === "vi" ? "Đã lưu GitHub token trên trình duyệt này." : "GitHub token saved on this browser.");
+})();
+
+  </script>
+</body>
+</html>
